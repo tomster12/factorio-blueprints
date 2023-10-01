@@ -19,7 +19,7 @@ struct ProblemDefinition
 };
 struct RecipeIngredient { int item = -1; int quantity = 0; };
 struct Recipe { int quantity = 0; float rate = 0; std::vector<RecipeIngredient> ingredients; };
-struct ComponentItemInfo { int item; };
+struct ItemRateInfo { float relativeRate; float relativeAssemblerCount; };
 
 class ProblemDefinitionFactory
 {
@@ -71,12 +71,18 @@ public:
 		this->problem = problem;
 		std::cout << "Solving..." << std::endl << std::endl;
 		unravelRecipes();
+
+		// Log unique items
+		std::cout << "Component Items: ";
+		for (int componentItem : componentItems) std::cout << componentItem << " ";
+		std::cout << std::endl;
 	}
 
 private:
 	const std::map<int, Recipe>& recipes;
 	ProblemDefinition problem;
-	std::vector<ComponentItemInfo> componentItems;
+	std::set<int> componentItems;
+	std::map<int, ItemRateInfo> itemRelativeRates;
 
 	// Unravel output item recipe to inputs
 	// Fails early if an item cannot be crafted from inputs
@@ -86,44 +92,45 @@ private:
 		std::set<int> itemInputs;
 		for (int i = 0; i < problem.itemInputs.size(); i++) itemInputs.insert(problem.itemInputs[i].item);
 
-		// Setup recipe unravel loop
+		// Keep track of component items and relative rates
 		componentItems.clear();
-		std::stack<ComponentItemInfo> currentComponentItems;
-		int itemOutput = problem.itemOutput.item;
-		currentComponentItems.push({ itemOutput });
-		while (currentComponentItems.size() > 0)
+		itemRelativeRates.clear();
+		std::stack<std::tuple<int, float>> recipeTraceStack;
+
+		// Add output item with base rate equal to 1 assembler
+		int outputItem = problem.itemOutput.item;
+		auto outputRecipe = recipes.at(outputItem);
+		float outputBaseRate = outputRecipe.rate * outputRecipe.quantity;
+		recipeTraceStack.push({ outputItem, outputBaseRate });
+
+		// Process traced items while any left
+		while (recipeTraceStack.size() > 0)
 		{
-			// Pop current item from queue
-			ComponentItemInfo currentComponentItem = currentComponentItems.top();
-			std::cout << "Checking item " << currentComponentItem.item << std::endl;
-			currentComponentItems.pop();
+			auto recipeTrace = recipeTraceStack.top();
+			recipeTraceStack.pop();
+			int currentItem = std::get<0>(recipeTrace);
+			float currentRelativeRate = std::get<1>(recipeTrace);
+
+			// Update relative rate for items
+			if (itemRelativeRates.find(currentItem) == itemRelativeRates.end()) itemRelativeRates[currentItem] = {};
+			itemRelativeRates.at(currentItem).relativeRate += currentRelativeRate;
 
 			// Skip if is an input item
-			if (itemInputs.find(currentComponentItem.item) != itemInputs.end())
-			{
-				std::cout << ": Found input " << std::endl;
-				continue;
-			}
+			if (itemInputs.find(currentItem) != itemInputs.end()) continue;
 
-			// Has no recipe so impossible problem
-			if (recipes.find(currentComponentItem.item) == recipes.end())
-			{
-				throw std::exception(("- Item " + std::to_string(currentComponentItem.item) + " is not an input nor can be crafted.").c_str());
-			}
+			// Has no recipe therefore impossible problem
+			if (recipes.find(currentItem) == recipes.end()) throw std::exception(("- Component item " + std::to_string(currentItem) + " has no recipe.").c_str());
 
 			// Has a recipe so recurse down
-			componentItems.push_back(currentComponentItem);
-			for (auto ingredient : recipes.at(currentComponentItem.item).ingredients)
+			auto currentRecipe = recipes.at(currentItem);
+			float currentRelativeAssemblerCount = currentRelativeRate / (currentRecipe.rate * currentRecipe.quantity);
+			componentItems.insert(currentItem);
+			itemRelativeRates.at(currentItem).relativeAssemblerCount += currentRelativeAssemblerCount;
+			for (auto ingredient : currentRecipe.ingredients)
 			{
-				std::cout << ": Found ingredient " << ingredient.item << std::endl;
-				currentComponentItems.push({ ingredient.item });
+				recipeTraceStack.push({ ingredient.item, ingredient.quantity * currentRelativeRate / currentRecipe.quantity });
 			}
 		}
-
-		// Log unique items
-		std::cout << std::endl << "Uniques items: ";
-		for (ComponentItemInfo componentItem : componentItems) std::cout << componentItem.item << " ";
-		std::cout << std::endl;
 	}
 
 	// Check the minimum required assemblers can fit
@@ -140,7 +147,7 @@ private:
 			throw std::exception(("Cannot fit minimumSpace " + std::to_string(minimumSpace) + " into blueprintSpace " + std::to_string(blueprintSpace)).c_str());
 		}
 
-		// Perform bin packing to check if minimum can fit
+		// TODO: Perform bin packing to check if minimum can fit
 	}
 };
 
