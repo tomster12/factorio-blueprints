@@ -7,19 +7,38 @@
 #include <stack>
 #include <string>
 
+#define LOG
+
+// ---------------------------------------------------------------------------------
+
 struct Coordinate { int x = 0; int y = 0; };
+
 struct ProblemItemInput { int item = -1; float rate = 0; Coordinate coordinate; };
+
 struct ProblemItemOutput { int item = -1; Coordinate coordinate; };
+
 struct ProblemDefinition
 {
 	int binWidth = -1;
 	int binHeight = -1;
-	std::vector<ProblemItemInput> itemInputs;
+	std::map<int, ProblemItemInput> itemInputs;
 	ProblemItemOutput itemOutput;
 };
+
 struct RecipeIngredient { int item = -1; int quantity = 0; };
+
 struct Recipe { int quantity = 0; float rate = 0; std::vector<RecipeIngredient> ingredients; };
-struct ItemRateInfo { float relativeRate; float relativeAssemblerCount; };
+
+struct SolverItemInfo
+{
+	int item;
+	bool isComponent;
+	float relativeRate;
+	float relativeAssemblerCountRaw;
+	int relativeAssemblerCount;
+};
+
+// ---------------------------------------------------------------------------------
 
 class ProblemDefinitionFactory
 {
@@ -38,7 +57,7 @@ public:
 
 	ProblemDefinitionFactory* addInputItem(int inputItem, float inputRate, int x, int y)
 	{
-		problemDefinition.itemInputs.push_back({ inputItem, inputRate, { x, y } });
+		problemDefinition.itemInputs[inputItem] = { inputItem, inputRate, { x, y } };
 		return this;
 	}
 
@@ -59,46 +78,86 @@ private:
 
 class ProblemSolver
 {
-
 public:
-	ProblemSolver(const std::map<int, Recipe>& recipes)
-		: recipes(recipes)
-	{}
-
-	void solve(const ProblemDefinition& problem)
+	// Produce a solver object with parameters then solve
+	static ProblemSolver solve(const std::map<int, Recipe>& recipes, const ProblemDefinition& problem)
 	{
-		// Run solve steps
-		this->problem = problem;
-		std::cout << "Solving..." << std::endl << std::endl;
-		unravelRecipes();
-
-		// Log unique items
-		std::cout << "Component Items: ";
-		for (int componentItem : componentItems) std::cout << componentItem << " ";
-		std::cout << std::endl;
+		// Initialize solver, run, return
+		ProblemSolver solver(recipes, problem);
+		solver.solve();
+		return solver;
 	}
 
 private:
+	// Main parameters
 	const std::map<int, Recipe>& recipes;
-	ProblemDefinition problem;
-	std::set<int> componentItems;
-	std::map<int, ItemRateInfo> itemRelativeRates;
+	const ProblemDefinition& problem;
+
+	// Internal state
+	int componentItemCount = 0;
+	std::map<int, SolverItemInfo> itemInfos;
+
+	ProblemSolver(const std::map<int, Recipe>& recipes, const ProblemDefinition& problem)
+		: recipes(recipes), problem(problem)
+	{}
+
+	// Main logical solve function
+	// Run each solve stage sequentially
+	void solve()
+	{
+		#ifdef LOG
+		std::cout << "Solving..." << std::endl << std::endl;
+		#endif
+
+		// Run solve steps
+		unravelRecipes();
+	}
 
 	// Unravel output item recipe to inputs
+	// Keep track of total rates relative to output rate
 	// Fails early if an item cannot be crafted from inputs
 	void unravelRecipes()
 	{
-		// Produce a set of input items
-		std::set<int> itemInputs;
-		for (int i = 0; i < problem.itemInputs.size(); i++) itemInputs.insert(problem.itemInputs[i].item);
+		#ifdef LOG
+		std::cout << "Stage: unravelRecipes()" << std::endl
+			<< "------------------------" << std::endl
+			<< std::endl;
+		
+		std::cout << "Problem Input Items: " << std::endl;
+		for (const auto& entry : problem.itemInputs)
+		{
+			std::cout << "- (" << entry.first << ") at (" << entry.second.coordinate.x << ", " << entry.second.coordinate.y << ") at " << entry.second.rate << "/s" << std::endl;
+		}
+		std::cout << std::endl;
+
+		std::cout << "Problem Output Item:" << std::endl
+			<< "- (" << problem.itemOutput.item << ") at (" << problem.itemOutput.coordinate.x << ", " << problem.itemOutput.coordinate.y << ")"
+			<< std::endl << std::endl;
+		
+		std::cout << "Problem Recipes: " << std::endl;
+		for (const auto& entry : recipes)
+		{
+			const int item = entry.first;
+			const Recipe& recipe = entry.second;
+			std::cout << "- " << "(" << item << ")*" << recipe.quantity << " at " << recipe.rate << "/s = ";
+			for (const auto& ingredent : recipe.ingredients)
+			{
+				std::cout << "(" << ingredent.item << ")*" << ingredent.quantity << " ";
+			}
+			std::cout << std::endl;
+		}
+		std::cout << std::endl;
+		#endif
 
 		// Keep track of component items and relative rates
-		componentItems.clear();
-		itemRelativeRates.clear();
+		componentItemCount = 0;
+		itemInfos.clear();
 		std::stack<std::tuple<int, float>> recipeTraceStack;
 
 		// Add output item with base rate equal to 1 assembler
 		int outputItem = problem.itemOutput.item;
+		if (recipes.find(outputItem) == recipes.end() && problem.itemInputs.find(outputItem) == problem.itemInputs.end())
+			throw std::exception(("Output item (" + std::to_string(outputItem) + ") has no recipe.").c_str());
 		auto outputRecipe = recipes.at(outputItem);
 		float outputBaseRate = outputRecipe.rate * outputRecipe.quantity;
 		recipeTraceStack.push({ outputItem, outputBaseRate });
@@ -106,40 +165,69 @@ private:
 		// Process traced items while any left
 		while (recipeTraceStack.size() > 0)
 		{
-			auto recipeTrace = recipeTraceStack.top();
+			const auto recipeTrace = recipeTraceStack.top();
 			recipeTraceStack.pop();
 			int currentItem = std::get<0>(recipeTrace);
 			float currentRelativeRate = std::get<1>(recipeTrace);
 
-			// Update relative rate for items
-			if (itemRelativeRates.find(currentItem) == itemRelativeRates.end()) itemRelativeRates[currentItem] = {};
-			itemRelativeRates.at(currentItem).relativeRate += currentRelativeRate;
+			// Update item info for item
+			bool isInput = problem.itemInputs.find(currentItem) != problem.itemInputs.end();
+			if (itemInfos.find(currentItem) == itemInfos.end()) itemInfos[currentItem] = { currentItem, !isInput, 0.0f, 0.0f };
+			itemInfos.at(currentItem).relativeRate += currentRelativeRate;
 
 			// Skip if is an input item
-			if (itemInputs.find(currentItem) != itemInputs.end()) continue;
+			if (isInput) continue;
 
 			// Has no recipe therefore impossible problem
-			if (recipes.find(currentItem) == recipes.end()) throw std::exception(("- Component item " + std::to_string(currentItem) + " has no recipe.").c_str());
+			if (recipes.find(currentItem) == recipes.end())
+				throw std::exception(("- Component item (" + std::to_string(currentItem) + ") has no recipe.").c_str());
 
 			// Has a recipe so recurse down
+			componentItemCount++;
 			auto currentRecipe = recipes.at(currentItem);
-			float currentRelativeAssemblerCount = currentRelativeRate / (currentRecipe.rate * currentRecipe.quantity);
-			componentItems.insert(currentItem);
-			itemRelativeRates.at(currentItem).relativeAssemblerCount += currentRelativeAssemblerCount;
-			for (auto ingredient : currentRecipe.ingredients)
+			for (const auto& ingredient : currentRecipe.ingredients)
 			{
 				recipeTraceStack.push({ ingredient.item, ingredient.quantity * currentRelativeRate / currentRecipe.quantity });
 			}
 		}
+
+		// Fill out item info
+		for (auto& entry : itemInfos)
+		{
+			SolverItemInfo& info = entry.second;
+			if (info.isComponent)
+			{
+				const Recipe& recipe = recipes.at(info.item);
+				info.relativeAssemblerCountRaw = info.relativeRate / (recipe.rate * recipe.quantity);;
+				info.relativeAssemblerCount = (int)ceil(info.relativeAssemblerCountRaw);
+			}
+		}
+
+		#ifdef LOG
+		std::cout << "Solver Items: " << std::endl;
+		for (const auto& entry : itemInfos)
+		{
+			std::cout << "- (" << entry.second.item << ") = "
+				<< (entry.second.isComponent ? "Component" : "Input") << " "
+				<< "(Rate: " << entry.second.relativeRate << ", "
+				<< "Assemblers: " << entry.second.relativeAssemblerCount << ")"
+				<< std::endl;
+		}
+		std::cout << std::endl;
+		#endif
 	}
 
 	// Check the minimum required assemblers can fit
 	// Sanity check then bin packing check
 	void checkMinimumSpace()
 	{
+		#ifdef LOG
+		std::cout << "Stage: checkMinimumSpace()" << std::endl << std::endl;
+		#endif
+
 		// Calculate space required
 		int blueprintSpace = problem.binWidth * problem.binHeight;
-		int minimumSpace = (int)(componentItems.size()) * 10;
+		int minimumSpace = componentItemCount * 10;
 
 		// Cannot fit minimum grid space
 		if (blueprintSpace < minimumSpace)
@@ -151,9 +239,11 @@ private:
 	}
 };
 
+// ---------------------------------------------------------------------------------
+
 int main()
 {
-	// Define global parameters
+	// Define main parameters
 	std::map<int, Recipe> recipes;
 	recipes[1] = { 1, 0.5f, { { 0, 1 } } };
 	recipes[2] = { 1, 0.5f, { { 0, 2 }, { 1, 2 } } };
@@ -161,11 +251,10 @@ int main()
 	// Define problem definition
 	ProblemDefinition problem = ProblemDefinitionFactory::newProblemDefinition()
 		->setSize(4, 4)
-		->addInputItem(0, 1.0f, 0, 0)
+		->addInputItem(0, 2.0f, 0, 0)
 		->addOutputItem(2, 3, 3)
 		->finalise();
 
-	// Initialize problem solver and solve
-	ProblemSolver solver(recipes);
-	solver.solve(problem);
+	// Run problem solver with given parameters
+	ProblemSolver solver = ProblemSolver::solve(recipes, problem);
 }
