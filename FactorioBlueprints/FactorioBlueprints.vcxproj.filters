@@ -10,12 +10,6 @@
     <ClCompile Include="FactorioBlueprints.cpp">
       <Filter>Main</Filter>
     </ClCompile>
-    <ClCompile Include="LocalSearch.cpp">
-      <Filter>Main</Filter>
-    </ClCompile>
-    <ClCompile Include="Pathfinding.cpp">
-      <Filter>Main</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="LocalSearch.h">

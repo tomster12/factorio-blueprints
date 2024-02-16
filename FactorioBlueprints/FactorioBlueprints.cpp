@@ -1,4 +1,3 @@
-
 #include <iostream>
 #include <tuple>
 #include <map>
@@ -6,6 +5,9 @@
 #include <set>
 #include <stack>
 #include <string>
+
+#include "LocalSearch.h"
+#include "Pathfinding.h"
 
 #define LOG
 
@@ -33,26 +35,24 @@ struct Recipe { int quantity = 0; float rate = 0; std::vector<RecipeIngredient> 
 
 struct ItemInfo
 {
-	int item;
-	bool isComponent;
-	float rate;
+	int item = -1;
+	bool isComponent = false;
+	float rate = 0.0f;
 };
 
 struct RunConfigItemInfo
 {
-	int item;
-	int assemblerCount;
+	int item = -1;
+	int assemblerCount = 0;
+	int outputInsertersPerAssembler = 0;
 	std::map<int, int> inputInsertersPerAssembler;
-	int outputInsertersPerAssembler;
 };
 
 struct RunConfig
 {
-	int outputAssemblerCount;
+	int outputAssemblerCount = 0;
 	std::map<int, RunConfigItemInfo> itemInfos;
 };
-
-// ------------------------
 
 class ProblemDefinitionFactory
 {
@@ -121,9 +121,9 @@ private:
 	// Run each solve stage sequentially
 	void solve()
 	{
-#ifdef LOG
+		#ifdef LOG
 		std::cout << "Solving..." << std::endl << std::endl;
-#endif
+		#endif
 
 		unravelRecipes();
 		int currentRunConfig = calculateRunConfigs();
@@ -142,7 +142,7 @@ private:
 			float rate;
 		};
 
-#ifdef LOG
+		#ifdef LOG
 		std::cout
 			<< "Stage: unravelRecipes()" << std::endl
 			<< "=========================" << std::endl
@@ -174,7 +174,7 @@ private:
 		}
 
 		std::cout << std::endl << "----------" << std::endl << std::endl;
-#endif
+		#endif
 
 		// Keep track of component items and relative rates
 		componentItemCount = 0;
@@ -226,7 +226,7 @@ private:
 			}
 		}
 
-#ifdef LOG
+		#ifdef LOG
 		std::cout << "Solver Items: " << std::endl;
 		for (const auto& entry : baseItemInfos)
 		{
@@ -236,7 +236,7 @@ private:
 				<< std::endl;
 		}
 		std::cout << std::endl << std::endl;
-#endif
+		#endif
 	}
 
 	// Figure out maximum possible output assembers
@@ -246,12 +246,12 @@ private:
 	// Return maximum run config
 	int calculateRunConfigs()
 	{
-#ifdef LOG
-		std::cout 
+		#ifdef LOG
+		std::cout
 			<< "Stage: calculateRunConfigs()" << std::endl
 			<< "=============================" << std::endl
 			<< std::endl;
-#endif
+		#endif
 
 		// Calculate maximum supported output assemblers
 		float maxSupported = 0.0f;
@@ -297,7 +297,7 @@ private:
 			possibleRunConfigs[i] = runConfig;
 		}
 
-#ifdef LOG
+		#ifdef LOG
 		for (int i = maxSupportedCeil; i > 0; i--)
 		{
 			const auto& runConfig = possibleRunConfigs[i];
@@ -321,7 +321,7 @@ private:
 			}
 			std::cout << std::endl;
 		}
-#endif
+		#endif
 
 		// Check space requirements for each
 		int bestRunConfig = -1;
@@ -340,22 +340,21 @@ private:
 				}
 			}
 
-#ifdef LOG
+			#ifdef LOG
 			std::cout << "Run config " << i << " required space: " << requiredSpace << " / " << availableSpace << std::endl;
-#endif
-			
+			#endif
+
 			// Have found the highest run config so break out
 			if (requiredSpace <= availableSpace)
 			{
 				bestRunConfig = i;
 				break;
 			}
-
 		}
 
-#ifdef LOG
+		#ifdef LOG
 		std::cout << "Found best run config: " << bestRunConfig << std::endl << std::endl;
-#endif
+		#endif
 
 		return bestRunConfig;
 	}
@@ -366,19 +365,50 @@ private:
 	// Bottom level A* to find paths
 	void performSearch(const RunConfig& runConfig)
 	{
-#ifdef LOG
+		#ifdef LOG
 		std::cout
 			<< "Stage: performSearch()" << std::endl
 			<< "=======================" << std::endl
 			<< std::endl;
-#endif
+		#endif
 
 		std::cout << "Performing search" << std::endl;
 	}
 };
 
+// ------------------------
+
+class ExampleLSState : public LSState<ExampleLSState>
+{
+public:
+	ExampleLSState(int value) : value(value) {}
+
+	float getCost() override
+	{
+		return static_cast<float>(value);
+	}
+
+	std::vector<std::shared_ptr<ExampleLSState>> getNeighbors() override
+	{
+		return {
+			std::make_shared<ExampleLSState>(value - 1),
+			std::make_shared<ExampleLSState>(value + 1)
+		};
+	}
+
+private:
+	int value;
+};
+
+// ------------------------
+
 int main()
 {
+	std::shared_ptr<ExampleLSState> result = LocalSearch::hillClimbing<ExampleLSState>(std::make_shared<ExampleLSState>(0), 50);
+	std::cout << "Result: " << result->getCost() << std::endl;
+
+	return 0;
+
 	// Define main parameters
 	std::map<int, Recipe> recipes;
 	recipes[1] = { 1, 0.5f, { { 0, 1 } } };

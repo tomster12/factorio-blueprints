@@ -127,8 +127,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="FactorioBlueprints.cpp" />
-    <ClCompile Include="LocalSearch.cpp" />
-    <ClCompile Include="Pathfinding.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="LocalSearch.h" />
