@@ -31,9 +31,21 @@ struct SolverItemInfo
 {
 	int item;
 	bool isComponent;
-	float relativeRate;
-	float relativeAssemblerCountRaw;
-	int relativeAssemblerCount;
+	float rate;
+};
+
+struct SolverRunConfigItemInfo
+{
+	int item;
+	int assemblerCount;
+	std::map<int, int> inputInsertersPerAssembler;
+	int outputInsertersPerAssembler;
+};
+
+struct SolverRunConfigInfo
+{
+	int outputAssemblerCount;
+	std::map<int, SolverRunConfigItemInfo> itemInfos;
 };
 
 class ProblemDefinitionFactory
@@ -75,23 +87,25 @@ private:
 class ProblemSolver
 {
 public:
+	static constexpr float MAX_INSERTER_RATE = 4.62f;
+	static constexpr float MAX_CONVEYOR_RATE = 45.0f;
+
 	// Produce a solver object with parameters then solve
 	static ProblemSolver solve(const std::map<int, Recipe>& recipes, const ProblemDefinition& problem)
 	{
-		// Initialize solver, run, return
 		ProblemSolver solver(recipes, problem);
 		solver.solve();
 		return solver;
 	}
 
 private:
-	// Main parameters
 	const std::map<int, Recipe>& recipes;
 	const ProblemDefinition& problem;
 
-	// Internal state
-	int componentItemCount = 0;
-	std::map<int, SolverItemInfo> itemInfos;
+	int componentItemCount = -1;
+	std::map<int, SolverItemInfo> baseItemInfos;
+	std::map<int, SolverRunConfigInfo> possibleRunConfigs;
+	int currentRunConfig = -1;
 
 	ProblemSolver(const std::map<int, Recipe>& recipes, const ProblemDefinition& problem)
 		: recipes(recipes), problem(problem)
@@ -101,25 +115,32 @@ private:
 	// Run each solve stage sequentially
 	void solve()
 	{
-		#ifdef LOG
+#ifdef LOG
 		std::cout << "Solving..." << std::endl << std::endl;
-		#endif
+#endif
 
-		// Run solve steps
 		unravelRecipes();
-		fitMaximumSpace();
+		calculateRunConfigs();
 	}
 
 	// Unravel output item recipe to inputs
-	// Keep track of total rates relative to output rate
+	// Keep track of total rates relative to a single output rate
 	// Fails early if an item cannot be crafted from inputs
+	// Populates this->baseItemInfos and componentItemCount
 	void unravelRecipes()
 	{
-		#ifdef LOG
-		std::cout << "Stage: unravelRecipes()" << std::endl
+		struct SolverRecipeTrace
+		{
+			int item;
+			float rate;
+		};
+
+#ifdef LOG
+		std::cout
+			<< "Stage: unravelRecipes()" << std::endl
 			<< "=========================" << std::endl
 			<< std::endl;
-		
+
 		std::cout << "Problem Input Items: " << std::endl;
 		for (const auto& entry : problem.itemInputs)
 		{
@@ -127,10 +148,11 @@ private:
 		}
 		std::cout << std::endl;
 
-		std::cout << "Problem Output Item:" << std::endl
+		std::cout
+			<< "Problem Output Item:" << std::endl
 			<< "- (" << problem.itemOutput.item << ") at (" << problem.itemOutput.coordinate.x << ", " << problem.itemOutput.coordinate.y << ")"
 			<< std::endl << std::endl;
-		
+
 		std::cout << "Problem Recipes: " << std::endl;
 		for (const auto& entry : recipes)
 		{
@@ -143,22 +165,21 @@ private:
 			}
 			std::cout << std::endl;
 		}
-		
+
 		std::cout << std::endl << "----------" << std::endl << std::endl;
-		#endif
+#endif
 
 		// Keep track of component items and relative rates
 		componentItemCount = 0;
-		itemInfos.clear();
-		std::stack<std::tuple<int, float>> recipeTraceStack;
+		baseItemInfos.clear();
+		std::stack<SolverRecipeTrace> recipeTraceStack;
 
 		// Output has a recipe so add to stack with relative rate for 1 assembler
 		int outputItem = problem.itemOutput.item;
 		if (recipes.find(outputItem) != recipes.end())
 		{
-			auto outputRecipe = recipes.at(outputItem);
-			float outputBaseRate = outputRecipe.rate * outputRecipe.quantity;
-			recipeTraceStack.push({ outputItem, outputBaseRate });
+			const auto& outputRecipe = recipes.at(outputItem);
+			recipeTraceStack.push({ outputItem, outputRecipe.rate * outputRecipe.quantity });
 		}
 
 		// Output is an input so add to stack with no info
@@ -171,87 +192,161 @@ private:
 		// Process traced items while any left
 		while (recipeTraceStack.size() > 0)
 		{
-			// Pop top of trace and extract values
-			const auto recipeTrace = recipeTraceStack.top();
+			const auto current = recipeTraceStack.top();
 			recipeTraceStack.pop();
-			int currentItem = std::get<0>(recipeTrace);
-			float currentRelativeRate = std::get<1>(recipeTrace);
 
 			// Initialize or update item info for item
-			bool isInput = problem.itemInputs.find(currentItem) != problem.itemInputs.end();
-			if (itemInfos.find(currentItem) == itemInfos.end()) itemInfos[currentItem] = { currentItem, !isInput, 0.0f, 0.0f };
-			itemInfos[currentItem].relativeRate += currentRelativeRate;
+			bool isInput = problem.itemInputs.find(current.item) != problem.itemInputs.end();
+			if (baseItemInfos.find(current.item) == baseItemInfos.end())
+			{
+				baseItemInfos[current.item] = { current.item, !isInput, current.rate };
+			}
+			else baseItemInfos[current.item].rate += current.rate;
 
 			// Skip if is an input
 			if (isInput) continue;
 
 			// No recipe therefore impossible problem
-			if (recipes.find(currentItem) == recipes.end())
-				throw std::exception(("- Component item (" + std::to_string(currentItem) + ") has no recipe.").c_str());
+			if (recipes.find(current.item) == recipes.end())
+				throw std::exception(("- Component item (" + std::to_string(current.item) + ") has no recipe.").c_str());
 
 			// Has a recipe so recurse down
 			componentItemCount++;
-			auto currentRecipe = recipes.at(currentItem);
+			const auto& currentRecipe = recipes.at(current.item);
 			for (const auto& ingredient : currentRecipe.ingredients)
 			{
-				recipeTraceStack.push({ ingredient.item, ingredient.quantity * currentRelativeRate / currentRecipe.quantity });
+				recipeTraceStack.push({ ingredient.item, ingredient.quantity * current.rate / currentRecipe.quantity });
 			}
 		}
 
-		// Fill out item info
-		for (auto& entry : itemInfos)
-		{
-			SolverItemInfo& info = entry.second;
-			if (info.isComponent)
-			{
-				const Recipe& recipe = recipes.at(info.item);
-				info.relativeAssemblerCountRaw = info.relativeRate / (recipe.rate * recipe.quantity);;
-				info.relativeAssemblerCount = (int)ceil(info.relativeAssemblerCountRaw);
-			}
-		}
-
-		#ifdef LOG
+#ifdef LOG
 		std::cout << "Solver Items: " << std::endl;
-		for (const auto& entry : itemInfos)
+		for (const auto& entry : baseItemInfos)
 		{
 			std::cout << "- (" << entry.second.item << ") = "
 				<< (entry.second.isComponent ? "Component" : "Input") << " "
-				<< "( Rate: " << entry.second.relativeRate << ", "
-				<< "Assemblers: " << entry.second.relativeAssemblerCount << "(" << entry.second.relativeAssemblerCountRaw << ")" << " )"
+				<< "( Rate: " << entry.second.rate << " )"
 				<< std::endl;
 		}
 		std::cout << std::endl << std::endl;
-		#endif
+#endif
 	}
 
-	// Find how many of each assembler we need
+	// Figure out maximum possible output assembers
 	// First check the minimum required assemblers can fit
-	// Then work upwards seeing many we can fit
-	void fitMaximumSpace()
+	// Then calculate max possible, and work backwards
+	// Populates this->possibleRunConfigs
+	// Return maximum run config
+	int calculateRunConfigs()
 	{
-		#ifdef LOG
-		std::cout << "Stage: checkMinimumSpace()" << std::endl
-					<< "===========================" << std::endl
-					<< std::endl;
-		#endif
+#ifdef LOG
+		std::cout << "Stage: calculateRunConfigs()" << std::endl
+			<< "===========================" << std::endl
+			<< std::endl;
+#endif
 
-		// Initial minimum space check (can it even be crafted)
-		int blueprintSpace = problem.binWidth * problem.binHeight;
-		int minimumSpace = problem.itemInputs.size() + componentItemCount * 10;
-
-		#ifdef LOG
-		std::cout << "Check minimumSpace " << minimumSpace << " / " << blueprintSpace << std::endl;
-		#endif
-
-		// Cannot fit minimum grid space
-		if (blueprintSpace < minimumSpace)
+		// Calculate maximum supported output assemblers
+		float maxSupported = 0.0f;
+		for (const auto& input : problem.itemInputs)
 		{
-			throw std::exception(("Cannot fit absolute minimumSpace " + std::to_string(minimumSpace) + " into blueprintSpace " + std::to_string(blueprintSpace)).c_str());
+			const ProblemItemInput& inputItem = input.second;
+			const auto& itemInfo = baseItemInfos.at(inputItem.item);
+			float itemsSupportedCount = inputItem.rate / itemInfo.rate;
+			maxSupported = std::max(maxSupported, itemsSupportedCount);
+		}
+		int maxSupportedCeil = static_cast<int>(std::ceil(maxSupported));
+
+		// Calculate run configs from max supported to 1
+		for (int i = maxSupportedCeil; i > 0; i--)
+		{
+			SolverRunConfigInfo runConfig;
+			runConfig.outputAssemblerCount = i;
+
+			for (const auto& item : baseItemInfos)
+			{
+				const SolverItemInfo& itemInfo = item.second;
+				SolverRunConfigItemInfo runConfigItem{ itemInfo.item };
+
+				// If it is a component item calculate assemblers and inserters counts
+				if (itemInfo.isComponent)
+				{
+					const Recipe& itemRecipe = recipes.at(itemInfo.item);
+					runConfigItem.assemblerCount = static_cast<int>(std::ceil(itemInfo.rate * i / (itemRecipe.quantity * itemRecipe.rate)));
+
+					int outputCount = static_cast<int>(std::ceil(itemInfo.rate * i / MAX_INSERTER_RATE));
+					runConfigItem.outputInsertersPerAssembler = outputCount;
+
+					for (const auto& input : itemRecipe.ingredients)
+					{
+						int inputCount = static_cast<int>(std::ceil(input.quantity * (itemInfo.rate / itemRecipe.quantity) * i / MAX_INSERTER_RATE));
+						runConfigItem.inputInsertersPerAssembler[input.item] = inputCount;
+					}
+				}
+
+				runConfig.itemInfos[itemInfo.item] = runConfigItem;
+			}
+
+			possibleRunConfigs[i] = runConfig;
 		}
 
-		// TODO: Find maximum supported rate
+#ifdef LOG
+		for (int i = maxSupportedCeil; i > 0; i--)
+		{
+			const auto& runConfig = possibleRunConfigs[i];
+			std::cout << "Run Config with output assemblers = " << runConfig.outputAssemblerCount << std::endl;
+			for (const auto& item : runConfig.itemInfos)
+			{
+				if (item.second.assemblerCount == 0)
+				{
+					std::cout << "\tInput item: " << item.first << std::endl;
+				}
+				else
+				{
+					std::cout << "\tComponent item: " << item.first << std::endl;
+					std::cout << "\t  Assemblers: " << item.second.assemblerCount << std::endl;
+					std::cout << "\t  Output inserters / assembler: " << item.second.outputInsertersPerAssembler << std::endl;
+					for (const auto& itemInput : item.second.inputInsertersPerAssembler)
+					{
+						std::cout << "\t  Input inserters / assembler for " << itemInput.first << ": " << itemInput.second << std::endl;
+					}
+				}
+			}
+			std::cout << std::endl;
+		}
+#endif
 
-		// TODO: Perform bin packing to check if minimum can fit
+		// Check space requirements for each
+		int bestRunConfig = -1;
+		int availableSpace = problem.binWidth * problem.binHeight - problem.itemInputs.size() - 1;
+		for (int i = maxSupportedCeil; i > 0; i--)
+		{
+			const auto& runConfig = possibleRunConfigs[i];
+			int requiredSpace = 0;
+			for (const auto& item : runConfig.itemInfos)
+			{
+				requiredSpace += item.second.assemblerCount * 9;
+				requiredSpace += item.second.outputInsertersPerAssembler;
+				for (const auto& itemInput : item.second.inputInsertersPerAssembler)
+				{
+					requiredSpace += itemInput.second;
+				}
+			}
+#ifdef LOG
+			std::cout << "Run config " << i << " required space: " << requiredSpace << " / " << availableSpace << std::endl;
+#endif
+
+			if (requiredSpace <= availableSpace)
+			{
+				bestRunConfig = i;
+				break;
+			}
+		}
+
+#ifdef LOG
+		std::cout << "Found best run config: " << bestRunConfig << std::endl << std::endl;
+#endif
+
+		return bestRunConfig;
 	}
 };
 
@@ -260,7 +355,7 @@ int main()
 	// Define main parameters
 	std::map<int, Recipe> recipes;
 	recipes[1] = { 1, 0.5f, { { 0, 1 } } };
-	recipes[2] = { 1, 0.49f, { { 0, 2 }, { 1, 2 } } };
+	recipes[2] = { 1, 0.5f, { { 0, 2 }, { 1, 2 } } };
 
 	// Define problem definition
 	ProblemDefinition problem = ProblemDefinitionFactory::newProblemDefinition()
