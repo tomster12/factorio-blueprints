@@ -11,6 +11,8 @@
 
 struct Coordinate { int x = 0; int y = 0; };
 
+// ------------------------
+
 struct ProblemItemInput { int item = -1; float rate = 0; Coordinate coordinate; };
 
 struct ProblemItemOutput { int item = -1; Coordinate coordinate; };
@@ -27,14 +29,16 @@ struct RecipeIngredient { int item = -1; int quantity = 0; };
 
 struct Recipe { int quantity = 0; float rate = 0; std::vector<RecipeIngredient> ingredients; };
 
-struct SolverItemInfo
+// ------------------------
+
+struct ItemInfo
 {
 	int item;
 	bool isComponent;
 	float rate;
 };
 
-struct SolverRunConfigItemInfo
+struct RunConfigItemInfo
 {
 	int item;
 	int assemblerCount;
@@ -42,11 +46,13 @@ struct SolverRunConfigItemInfo
 	int outputInsertersPerAssembler;
 };
 
-struct SolverRunConfigInfo
+struct RunConfig
 {
 	int outputAssemblerCount;
-	std::map<int, SolverRunConfigItemInfo> itemInfos;
+	std::map<int, RunConfigItemInfo> itemInfos;
 };
+
+// ------------------------
 
 class ProblemDefinitionFactory
 {
@@ -103,8 +109,8 @@ private:
 	const ProblemDefinition& problem;
 
 	int componentItemCount = -1;
-	std::map<int, SolverItemInfo> baseItemInfos;
-	std::map<int, SolverRunConfigInfo> possibleRunConfigs;
+	std::map<int, ItemInfo> baseItemInfos;
+	std::map<int, RunConfig> possibleRunConfigs;
 	int currentRunConfig = -1;
 
 	ProblemSolver(const std::map<int, Recipe>& recipes, const ProblemDefinition& problem)
@@ -120,7 +126,8 @@ private:
 #endif
 
 		unravelRecipes();
-		calculateRunConfigs();
+		int currentRunConfig = calculateRunConfigs();
+		performSearch(possibleRunConfigs[currentRunConfig]);
 	}
 
 	// Unravel output item recipe to inputs
@@ -240,8 +247,9 @@ private:
 	int calculateRunConfigs()
 	{
 #ifdef LOG
-		std::cout << "Stage: calculateRunConfigs()" << std::endl
-			<< "===========================" << std::endl
+		std::cout 
+			<< "Stage: calculateRunConfigs()" << std::endl
+			<< "=============================" << std::endl
 			<< std::endl;
 #endif
 
@@ -259,31 +267,31 @@ private:
 		// Calculate run configs from max supported to 1
 		for (int i = maxSupportedCeil; i > 0; i--)
 		{
-			SolverRunConfigInfo runConfig;
+			RunConfig runConfig;
 			runConfig.outputAssemblerCount = i;
 
 			for (const auto& item : baseItemInfos)
 			{
-				const SolverItemInfo& itemInfo = item.second;
-				SolverRunConfigItemInfo runConfigItem{ itemInfo.item };
+				const ItemInfo& itemInfo = item.second;
+				RunConfigItemInfo RunConfigItemInfo{ itemInfo.item };
 
 				// If it is a component item calculate assemblers and inserters counts
 				if (itemInfo.isComponent)
 				{
 					const Recipe& itemRecipe = recipes.at(itemInfo.item);
-					runConfigItem.assemblerCount = static_cast<int>(std::ceil(itemInfo.rate * i / (itemRecipe.quantity * itemRecipe.rate)));
+					RunConfigItemInfo.assemblerCount = static_cast<int>(std::ceil(itemInfo.rate * i / (itemRecipe.quantity * itemRecipe.rate)));
 
 					int outputCount = static_cast<int>(std::ceil(itemInfo.rate * i / MAX_INSERTER_RATE));
-					runConfigItem.outputInsertersPerAssembler = outputCount;
+					RunConfigItemInfo.outputInsertersPerAssembler = outputCount;
 
 					for (const auto& input : itemRecipe.ingredients)
 					{
 						int inputCount = static_cast<int>(std::ceil(input.quantity * (itemInfo.rate / itemRecipe.quantity) * i / MAX_INSERTER_RATE));
-						runConfigItem.inputInsertersPerAssembler[input.item] = inputCount;
+						RunConfigItemInfo.inputInsertersPerAssembler[input.item] = inputCount;
 					}
 				}
 
-				runConfig.itemInfos[itemInfo.item] = runConfigItem;
+				runConfig.itemInfos[itemInfo.item] = RunConfigItemInfo;
 			}
 
 			possibleRunConfigs[i] = runConfig;
@@ -317,11 +325,11 @@ private:
 
 		// Check space requirements for each
 		int bestRunConfig = -1;
-		int availableSpace = problem.binWidth * problem.binHeight - problem.itemInputs.size() - 1;
+		size_t availableSpace = problem.binWidth * problem.binHeight - problem.itemInputs.size() - 1;
 		for (int i = maxSupportedCeil; i > 0; i--)
 		{
 			const auto& runConfig = possibleRunConfigs[i];
-			int requiredSpace = 0;
+			size_t requiredSpace = 0;
 			for (const auto& item : runConfig.itemInfos)
 			{
 				requiredSpace += item.second.assemblerCount * 9;
@@ -331,15 +339,18 @@ private:
 					requiredSpace += itemInput.second;
 				}
 			}
+
 #ifdef LOG
 			std::cout << "Run config " << i << " required space: " << requiredSpace << " / " << availableSpace << std::endl;
 #endif
-
+			
+			// Have found the highest run config so break out
 			if (requiredSpace <= availableSpace)
 			{
 				bestRunConfig = i;
 				break;
 			}
+
 		}
 
 #ifdef LOG
@@ -347,6 +358,22 @@ private:
 #endif
 
 		return bestRunConfig;
+	}
+
+	// Perform the main search for a solution
+	// Top level local search with placement of assemblers / inserters
+	// Lower level conflict based search over orderings of paths
+	// Bottom level A* to find paths
+	void performSearch(const RunConfig& runConfig)
+	{
+#ifdef LOG
+		std::cout
+			<< "Stage: performSearch()" << std::endl
+			<< "=======================" << std::endl
+			<< std::endl;
+#endif
+
+		std::cout << "Performing search" << std::endl;
 	}
 };
 

@@ -127,6 +127,12 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="FactorioBlueprints.cpp" />
+    <ClCompile Include="LocalSearch.cpp" />
+    <ClCompile Include="Pathfinding.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="LocalSearch.h" />
+    <ClInclude Include="Pathfinding.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
