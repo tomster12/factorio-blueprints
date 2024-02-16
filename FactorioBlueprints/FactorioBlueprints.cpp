@@ -378,21 +378,21 @@ private:
 
 // ------------------------
 
-class ExampleLSState : public LSState<ExampleLSState>
+class ExampleState : public ls::State
 {
 public:
-	ExampleLSState(int value) : value(value) {}
+	ExampleState(int value) : value(value) {}
 
 	float getCost() override
 	{
 		return static_cast<float>(value);
 	}
 
-	std::vector<std::shared_ptr<ExampleLSState>> getNeighbors() override
+	std::vector<ls::StatePtr> getNeighbors() override
 	{
 		return {
-			std::make_shared<ExampleLSState>(value - 1),
-			std::make_shared<ExampleLSState>(value + 1)
+			std::make_shared<ExampleState>(value - 1),
+			std::make_shared<ExampleState>(value + 1)
 		};
 	}
 
@@ -400,11 +400,10 @@ private:
 	int value;
 };
 
-// ------------------------
-
 int main()
 {
-	std::shared_ptr<ExampleLSState> result = LocalSearch::hillClimbing<ExampleLSState>(std::make_shared<ExampleLSState>(0), 50);
+	auto _result = ls::hillClimbing(std::make_shared<ExampleState>(0), 50);
+	auto result = std::static_pointer_cast<ExampleState>(_result);
 	std::cout << "Result: " << result->getCost() << std::endl;
 
 	return 0;
