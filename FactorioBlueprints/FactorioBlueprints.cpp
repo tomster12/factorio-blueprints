@@ -13,7 +13,8 @@
 
 struct Coordinate { int x = 0; int y = 0; };
 
-// ------------------------
+// Structs passed to solver to define the problem
+// ------------------------------------------------
 
 struct ProblemItemInput { int item = -1; float rate = 0; Coordinate coordinate; };
 
@@ -67,8 +68,11 @@ struct RecipeIngredient { int item = -1; int quantity = 0; };
 
 struct Recipe { int quantity = 0; float rate = 0; std::vector<RecipeIngredient> ingredients; };
 
-// ------------------------
+// Structs used by solver for internal representation
+// ------------------------------------------------
 
+// Info extracted from recipes about item
+// rate relative to output item rate
 struct ItemInfo
 {
 	int item = -1;
@@ -76,6 +80,8 @@ struct ItemInfo
 	float rate = 0.0f;
 };
 
+// For a given run, how many assemblers are required
+// and how many inserters are required for output / each input
 struct RunConfigItemInfo
 {
 	int item = -1;
@@ -84,13 +90,30 @@ struct RunConfigItemInfo
 	std::map<int, int> inputInsertersPerAssembler;
 };
 
+// A given run of the solver with a set amount of
+// output assemblers and the required item info
 struct RunConfig
 {
 	int outputAssemblerCount = 0;
 	std::map<int, RunConfigItemInfo> itemInfos;
 };
 
-class LSState : public ls::State
+/*
+struct AssemblerPlacement
+{
+	int item = -1;
+	int assembler = -1;
+	Coordinate pos;
+};
+
+struct WorldState
+{
+	std::map<int, AssemblerPlacement> assemblers;
+	std::map<int, std::vector<Coordinate>> inserterPositions;
+};
+*/
+
+class LSState : public ls::State<LSState>
 {
 	// static createRandom() that takes in a RunConfig
 	// - Generates assemblers with random inserter placement
@@ -104,24 +127,34 @@ class LSState : public ls::State
 	// - Swap assembler recipe
 
 public:
-	LSState(int value) : State(value), value(value) {}
+	LSState(const RunConfig& runConfig, float val = 0) : runConfig(runConfig), val(val)
+	{}
 
 	float getCost() override
 	{
-		return static_cast<float>(value);
+		return val;
 	}
 
-	std::vector<ls::StatePtr> getNeighbors() override
+	std::vector<std::shared_ptr<LSState>> getNeighbors() override
 	{
 		return {
-			std::make_shared<LSState>(value - 1),
-			std::make_shared<LSState>(value + 1)
+			std::make_shared<LSState>(runConfig, val - 1),
+			std::make_shared<LSState>(runConfig, val + 1),
 		};
 	}
 
+	bool operator==(const LSState& other) const override
+	{
+		std::cout << "Check" << std::endl;
+		return true;
+	}
+
 private:
-	int value;
+	const RunConfig& runConfig;
+	const float val;
 };
+
+// ------------------------------------------------
 
 class ProblemSolver
 {
@@ -404,13 +437,14 @@ private:
 			<< std::endl;
 		#endif
 
-		ls::StatePtr _result = ls::hillClimbing(std::make_shared<LSState>(0), 50);
-		std::shared_ptr<LSState> result = std::static_pointer_cast<LSState>(_result);
-		std::cout << "Result: " << result->getCost() << std::endl;
+		std::shared_ptr<LSState> initialState = std::make_shared<LSState>(runConfig);
+		std::shared_ptr<LSState> finalState = ls::hillClimbing(initialState, 50);
+
+		std::cout << "Result: " << finalState->getCost() << std::endl;
 	}
 };
 
-// ------------------------
+// ------------------------------------------------
 
 int main()
 {

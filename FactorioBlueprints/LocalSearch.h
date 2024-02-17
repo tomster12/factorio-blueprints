@@ -4,33 +4,28 @@
 
 namespace ls
 {
-	class State;
-	using StatePtr = std::shared_ptr<State>;
-
+	template<typename T>
 	class State
 	{
 	public:
-		State(int uid) : uid(uid) {}
 		virtual float getCost() = 0;
-		virtual std::vector<std::shared_ptr<State>> getNeighbors() = 0;
-
-		bool operator==(const State& other) const { return uid == other.uid; }
-
-	private:
-		int uid;
+		virtual std::vector<std::shared_ptr<T>> getNeighbors() = 0;
+		virtual bool operator==(const T& other) const = 0;
 	};
 
-	bool operator==(const StatePtr& lhs, const StatePtr& rhs) { return *lhs == *rhs; }
+	template<typename T>
+	bool operator==(const State<T>& lhs, const State<T>& rhs) { return *lhs == *rhs; }
 
-	StatePtr hillClimbing(StatePtr start, int maxIterations = 100)
+	template<typename T>
+	std::shared_ptr<T> hillClimbing(std::shared_ptr<T> start, int maxIterations = 100)
 	{
-		std::vector<StatePtr> cached{ start };
-		StatePtr current = start;
+		std::vector<std::shared_ptr<T>> cached{ start };
+		std::shared_ptr<T> current = start;
 
 		for (size_t it = 0; it < maxIterations; it++)
 		{
 			// Find best neighbour
-			StatePtr best = current;
+			std::shared_ptr<T> best = current;
 			for (auto& neighbor : current->getNeighbors())
 			{
 				if (std::find(cached.begin(), cached.end(), neighbor) != cached.end()) continue;
