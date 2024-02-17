@@ -27,33 +27,6 @@ struct ProblemDefinition
 	ProblemItemOutput itemOutput;
 };
 
-struct RecipeIngredient { int item = -1; int quantity = 0; };
-
-struct Recipe { int quantity = 0; float rate = 0; std::vector<RecipeIngredient> ingredients; };
-
-// ------------------------
-
-struct ItemInfo
-{
-	int item = -1;
-	bool isComponent = false;
-	float rate = 0.0f;
-};
-
-struct RunConfigItemInfo
-{
-	int item = -1;
-	int assemblerCount = 0;
-	int outputInsertersPerAssembler = 0;
-	std::map<int, int> inputInsertersPerAssembler;
-};
-
-struct RunConfig
-{
-	int outputAssemblerCount = 0;
-	std::map<int, RunConfigItemInfo> itemInfos;
-};
-
 class ProblemDefinitionFactory
 {
 public:
@@ -88,6 +61,55 @@ public:
 
 private:
 	ProblemDefinition problemDefinition;
+};
+
+struct RecipeIngredient { int item = -1; int quantity = 0; };
+
+struct Recipe { int quantity = 0; float rate = 0; std::vector<RecipeIngredient> ingredients; };
+
+// ------------------------
+
+struct ItemInfo
+{
+	int item = -1;
+	bool isComponent = false;
+	float rate = 0.0f;
+};
+
+struct RunConfigItemInfo
+{
+	int item = -1;
+	int assemblerCount = 0;
+	int outputInsertersPerAssembler = 0;
+	std::map<int, int> inputInsertersPerAssembler;
+};
+
+struct RunConfig
+{
+	int outputAssemblerCount = 0;
+	std::map<int, RunConfigItemInfo> itemInfos;
+};
+
+class LSState : public ls::State
+{
+public:
+	LSState(int value) : State(value), value(value) {}
+
+	float getCost() override
+	{
+		return static_cast<float>(value);
+	}
+
+	std::vector<ls::StatePtr> getNeighbors() override
+	{
+		return {
+			std::make_shared<LSState>(value - 1),
+			std::make_shared<LSState>(value + 1)
+		};
+	}
+
+private:
+	int value;
 };
 
 class ProblemSolver
@@ -372,42 +394,16 @@ private:
 			<< std::endl;
 		#endif
 
-		std::cout << "Performing search" << std::endl;
+		auto _result = ls::hillClimbing(std::make_shared<LSState>(0), 50);
+		auto result = std::static_pointer_cast<LSState>(_result);
+		std::cout << "Result: " << result->getCost() << std::endl;
 	}
 };
 
 // ------------------------
 
-class ExampleState : public ls::State
-{
-public:
-	ExampleState(int value) : value(value) {}
-
-	float getCost() override
-	{
-		return static_cast<float>(value);
-	}
-
-	std::vector<ls::StatePtr> getNeighbors() override
-	{
-		return {
-			std::make_shared<ExampleState>(value - 1),
-			std::make_shared<ExampleState>(value + 1)
-		};
-	}
-
-private:
-	int value;
-};
-
 int main()
 {
-	auto _result = ls::hillClimbing(std::make_shared<ExampleState>(0), 50);
-	auto result = std::static_pointer_cast<ExampleState>(_result);
-	std::cout << "Result: " << result->getCost() << std::endl;
-
-	return 0;
-
 	// Define main parameters
 	std::map<int, Recipe> recipes;
 	recipes[1] = { 1, 0.5f, { { 0, 1 } } };
