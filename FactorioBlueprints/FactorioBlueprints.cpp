@@ -30,7 +30,7 @@ struct ProblemDefinition
 class ProblemDefinitionFactory
 {
 public:
-	static std::unique_ptr<ProblemDefinitionFactory> newProblemDefinition()
+	static std::unique_ptr<ProblemDefinitionFactory> create()
 	{
 		return std::make_unique<ProblemDefinitionFactory>();
 	}
@@ -92,6 +92,17 @@ struct RunConfig
 
 class LSState : public ls::State
 {
+	// static createRandom() that takes in a RunConfig
+	// - Generates assemblers with random inserter placement
+	// - Generates bounding boxes for shape outline
+	// - Performs bin packing to find oreitnation
+
+	// Get neighbours needs to cache
+	// Possible state changes:
+	// - Move assembler by 1 square
+	// - Move 1 inserter position
+	// - Swap assembler recipe
+
 public:
 	LSState(int value) : State(value), value(value) {}
 
@@ -133,7 +144,6 @@ private:
 	int componentItemCount = -1;
 	std::map<int, ItemInfo> baseItemInfos;
 	std::map<int, RunConfig> possibleRunConfigs;
-	int currentRunConfig = -1;
 
 	ProblemSolver(const std::map<int, Recipe>& recipes, const ProblemDefinition& problem)
 		: recipes(recipes), problem(problem)
@@ -394,8 +404,8 @@ private:
 			<< std::endl;
 		#endif
 
-		auto _result = ls::hillClimbing(std::make_shared<LSState>(0), 50);
-		auto result = std::static_pointer_cast<LSState>(_result);
+		ls::StatePtr _result = ls::hillClimbing(std::make_shared<LSState>(0), 50);
+		std::shared_ptr<LSState> result = std::static_pointer_cast<LSState>(_result);
 		std::cout << "Result: " << result->getCost() << std::endl;
 	}
 };
@@ -410,7 +420,7 @@ int main()
 	recipes[2] = { 1, 0.5f, { { 0, 2 }, { 1, 2 } } };
 
 	// Define problem definition
-	ProblemDefinition problem = ProblemDefinitionFactory::newProblemDefinition()
+	ProblemDefinition problem = ProblemDefinitionFactory::create()
 		->setSize(7, 7)
 		->addInputItem(0, 4.0f, 0, 1)
 		->addOutputItem(2, 6, 6)
