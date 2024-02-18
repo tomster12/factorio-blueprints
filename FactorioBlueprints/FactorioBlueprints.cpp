@@ -143,10 +143,9 @@ public:
 		};
 	}
 
-	bool operator==(const LSState& other) const override
+	bool operator==(LSState& other) const override
 	{
-		std::cout << "Check" << std::endl;
-		return true;
+		return val == other.val;
 	}
 
 private:
@@ -438,7 +437,7 @@ private:
 		#endif
 
 		std::shared_ptr<LSState> initialState = std::make_shared<LSState>(runConfig);
-		std::shared_ptr<LSState> finalState = ls::hillClimbing(initialState, 50);
+		std::shared_ptr<LSState> finalState = ls::hillClimbing<LSState>(initialState, 50);
 
 		std::cout << "Result: " << finalState->getCost() << std::endl;
 	}

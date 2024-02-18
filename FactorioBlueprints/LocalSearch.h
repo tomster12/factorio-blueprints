@@ -10,22 +10,26 @@ namespace ls
 	public:
 		virtual float getCost() = 0;
 		virtual std::vector<std::shared_ptr<T>> getNeighbors() = 0;
-		virtual bool operator==(const T& other) const = 0;
+		virtual bool operator==(T& other) const = 0;
 	};
 
 	template<typename T>
-	bool operator==(const State<T>& lhs, const State<T>& rhs) { return *lhs == *rhs; }
+	bool operator==(std::shared_ptr<State<T>>& lhs, std::shared_ptr<State<T>>& rhs)
+	{
+		//return (*lhs) == (*rhs);
+		return (*std::static_pointer_cast<T>(lhs)) == (*std::static_pointer_cast<T>(rhs));
+	}
 
 	template<typename T>
-	std::shared_ptr<T> hillClimbing(std::shared_ptr<T> start, int maxIterations = 100)
+	std::shared_ptr<T> hillClimbing(std::shared_ptr<State<T>> start, int maxIterations = 100)
 	{
-		std::vector<std::shared_ptr<T>> cached{ start };
-		std::shared_ptr<T> current = start;
+		std::vector<std::shared_ptr<State<T>>> cached{ start };
+		std::shared_ptr<State<T>> current = start;
 
 		for (size_t it = 0; it < maxIterations; it++)
 		{
 			// Find best neighbour
-			std::shared_ptr<T> best = current;
+			std::shared_ptr<State<T>> best = current;
 			for (auto& neighbor : current->getNeighbors())
 			{
 				if (std::find(cached.begin(), cached.end(), neighbor) != cached.end()) continue;
@@ -40,6 +44,6 @@ namespace ls
 			current = best;
 		}
 
-		return current;
+		return std::static_pointer_cast<T>(current);
 	}
 }
