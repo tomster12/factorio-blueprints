@@ -98,57 +98,79 @@ struct RunConfig
 	std::map<int, RunConfigItemInfo> itemInfos;
 };
 
-/*
-struct AssemblerPlacement
+// An inserter placed in an LSState
+struct InserterInstance
 {
 	int item = -1;
-	int assembler = -1;
-	Coordinate pos;
+	bool isInput = false;
+	Coordinate coordinate;
 };
 
-struct WorldState
+// An assembler placed in an LSState
+struct AssemblerInstance
 {
-	std::map<int, AssemblerPlacement> assemblers;
-	std::map<int, std::vector<Coordinate>> inserterPositions;
+	int item = -1;
+	Coordinate coordinate;
+	std::vector<InserterInstance> inInserters;
+	std::vector<InserterInstance> outInserters;
 };
-*/
 
+// A state represents a successfully placed set of assemblers / inserters
+// A valid state is one which delivers the output item
+// The cost of a state is determined by a CB pathfinding algorithm
 class LSState : public ls::State<LSState>
 {
-	// static createRandom() that takes in a RunConfig
-	// - Generates assemblers with random inserter placement
-	// - Generates bounding boxes for shape outline
-	// - Performs bin packing to find oreitnation
-
-	// Get neighbours needs to cache
-	// Possible state changes:
-	// - Move assembler by 1 square
-	// - Move 1 inserter position
-	// - Swap assembler recipe
-
 public:
-	LSState(const RunConfig& runConfig, float val = 0) : runConfig(runConfig), val(val)
-	{}
+	bool isValid()
+	{
+		return true;
+	}
 
 	float getCost() override
 	{
-		return val;
+		return 0;
 	}
 
 	std::vector<std::shared_ptr<LSState>> getNeighbors() override
 	{
-		return {
-			std::make_shared<LSState>(runConfig, val - 1),
-			std::make_shared<LSState>(runConfig, val + 1),
-		};
+		// TODO:
+		// - Move assembler by 1 square
+		// - Move 1 inserter position
+		// - Swap assembler recipe
+		return {};
 	}
 
-	bool operator==(LSState& other) const override { return val == other.val; }
+	bool operator==(LSState& other) const override { return false; }
+
+	static std::shared_ptr<LSState> createRandom(const RunConfig& runConfig)
+	{
+		// TODO:
+		// - Generates assemblers with random inserter placement
+		// - Performs bin packing to find arrangement of assemblers
+		return std::make_shared<LSState>();
+	}
 
 private:
-	const RunConfig& runConfig;
-	const float val;
+	std::vector<AssemblerInstance> assemblers;
 };
+
+/*
+class ASNode {};
+
+struct ASPath
+{
+	Coordinate from;
+	Coordinate to;
+	bool isCalculated = false;
+	std::vector<ASNode> nodes;
+};
+
+struct CBPFState
+{
+	std::map<Coordinate, bool> blocked;
+	std::vector<ASPath> paths;
+};
+*/
 
 // ------------------------------------------------
 
@@ -433,10 +455,11 @@ private:
 			<< std::endl;
 		#endif
 
-		std::shared_ptr<LSState> initialState = std::make_shared<LSState>(runConfig);
+		std::shared_ptr<LSState> initialState = LSState::createRandom(runConfig);
 		std::shared_ptr<LSState> finalState = ls::hillClimbing(initialState, 50);
 
-		std::cout << "Result: " << finalState->getCost() << std::endl;
+		std::cout << "Cost: " << finalState->getCost() << std::endl;
+		std::cout << "Valid: " << finalState->isValid() << std::endl;
 	}
 };
 

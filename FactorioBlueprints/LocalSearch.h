@@ -27,10 +27,12 @@ namespace ls
 			std::shared_ptr<T> best = current;
 			for (std::shared_ptr<T>& neighbor : current->getNeighbors())
 			{
+				// If cached do not re-evaluate
 				const auto ptrEq = [&](std::shared_ptr<T>& other) { return *other == *neighbor; };
 				if (std::find_if(cached.begin(), cached.end(), ptrEq) != cached.end()) continue;
-				if (neighbor->getCost() < best->getCost()) best = neighbor;
 				cached.push_back(neighbor);
+
+				if (neighbor->getCost() < best->getCost()) best = neighbor;
 			}
 
 			// Found local minimum
