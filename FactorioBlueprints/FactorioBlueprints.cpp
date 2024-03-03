@@ -13,8 +13,11 @@
 
 struct Coordinate { int x = 0; int y = 0; };
 
-// Structs passed to solver to define the problem
-// ------------------------------------------------
+enum class Direction { UP, DOWN, LEFT, RIGHT };
+
+struct RecipeIngredient { int item = -1; int quantity = 0; };
+
+struct Recipe { int quantity = 0; float rate = 0; std::vector<RecipeIngredient> ingredients; };
 
 struct ProblemItemInput { int item = -1; float rate = 0; Coordinate coordinate; };
 
@@ -24,6 +27,7 @@ struct ProblemDefinition
 {
 	int binWidth = -1;
 	int binHeight = -1;
+	std::map<int, Recipe> recipes;
 	std::map<int, ProblemItemInput> itemInputs;
 	ProblemItemOutput itemOutput;
 };
@@ -34,6 +38,12 @@ public:
 	static std::unique_ptr<ProblemDefinitionFactory> create()
 	{
 		return std::make_unique<ProblemDefinitionFactory>();
+	}
+
+	ProblemDefinitionFactory* setRecipes(std::map<int, Recipe> recipes)
+	{
+		problemDefinition.recipes = recipes;
+		return this;
 	}
 
 	ProblemDefinitionFactory* setSize(int binWidth, int binHeight)
@@ -64,11 +74,6 @@ private:
 	ProblemDefinition problemDefinition;
 };
 
-struct RecipeIngredient { int item = -1; int quantity = 0; };
-
-struct Recipe { int quantity = 0; float rate = 0; std::vector<RecipeIngredient> ingredients; };
-
-// Structs used by solver for internal representation
 // ------------------------------------------------
 
 // Info extracted from recipes about item
@@ -80,7 +85,7 @@ struct ItemInfo
 	float rate = 0.0f;
 };
 
-// For a given run, how many assemblers are required
+// For a given run how many assemblers are required for an item
 // and how many inserters are required for output / each input
 struct RunConfigItemInfo
 {
@@ -98,22 +103,62 @@ struct RunConfig
 	std::map<int, RunConfigItemInfo> itemInfos;
 };
 
-// An inserter placed in an LSState
+// An inserter in an AsemblerInstance in an LSState
 struct InserterInstance
 {
 	int item = -1;
 	bool isInput = false;
-	Coordinate coordinate;
+	int a = 1;
 };
 
 // An assembler placed in an LSState
 struct AssemblerInstance
 {
+	static const std::vector<Direction> inserterDirections;
+	static const std::vector<Coordinate> inserterOffsets;
+
 	int item = -1;
 	Coordinate coordinate;
-	std::vector<InserterInstance> inInserters;
-	std::vector<InserterInstance> outInserters;
+	InserterInstance inserters[12];
 };
+
+const std::vector<Direction> AssemblerInstance::inserterDirections = {
+	Direction::UP, Direction::UP, Direction::UP,
+	Direction::RIGHT, Direction::RIGHT, Direction::RIGHT,
+	Direction::DOWN, Direction::DOWN, Direction::DOWN,
+	Direction::LEFT, Direction::LEFT, Direction::LEFT
+};
+
+const std::vector<Coordinate> AssemblerInstance::inserterOffsets = {
+	{ 0, -1 }, { 1, -1 }, { 2, -1 },
+	{ 3, 0 }, { 3, 1 }, { 3, 2 },
+	{ 2, 3 }, { 1, 3 }, { 0, 3 },
+	{ -1, 2 }, { -1, 1 }, { -1, 0 }
+};
+
+Direction dirOpposite(Direction dir)
+{
+	switch (dir)
+	{
+	case Direction::UP: return Direction::DOWN;
+	case Direction::DOWN: return Direction::UP;
+	case Direction::LEFT: return Direction::RIGHT;
+	case Direction::RIGHT: return Direction::LEFT;
+	}
+	return Direction::UP;
+}
+
+Coordinate dirOffset(Direction dir)
+{
+	switch (dir)
+	{
+	case Direction::UP: return { 0, -1 };
+	case Direction::DOWN: return { 0, 1 };
+	case Direction::LEFT: return { -1, 0 };
+	case Direction::RIGHT: return { 1, 0 };
+	}
+	return { 0, 0 };
+}
 
 // A state represents a successfully placed set of assemblers / inserters
 // A valid state is one which delivers the output item
@@ -121,58 +166,283 @@ struct AssemblerInstance
 class LSState : public ls::State<LSState>
 {
 public:
-	bool isValid()
+
+	static std::shared_ptr<LSState> createRandom(const ProblemDefinition& problem, const RunConfig& runConfig)
 	{
-		return true;
+		std::vector<AssemblerInstance> assemblers;
+
+		// For each item type
+		for (const auto& item : runConfig.itemInfos)
+		{
+			const RunConfigItemInfo& itemInfo = item.second;
+			if (itemInfo.assemblerCount == 0) continue;
+
+			// Randomly place assemblers
+			for (int i = 0; i < itemInfo.assemblerCount; i++)
+			{
+				Coordinate coord;
+				coord.x = rand() % (problem.binWidth - 2);
+				coord.y = rand() % (problem.binHeight - 2);
+				AssemblerInstance assembler{ item.first, coord };
+
+				// Available inserters for this assembler
+				std::vector<int> availableInserters(12);
+				for (int i = 0; i < 12; i++) availableInserters[i] = i;
+
+				// Randomly place input inserters
+				for (const auto& input : itemInfo.inputInsertersPerAssembler)
+				{
+					for (int i = 0; i < input.second; i++)
+					{
+						int index = rand() % availableInserters.size();
+						int inserterIndex = availableInserters[index];
+						availableInserters.erase(availableInserters.begin() + index);
+						assembler.inserters[inserterIndex] = InserterInstance{ input.first, true };
+					}
+				}
+
+				// Randomly place output inserters
+				for (int i = 0; i < itemInfo.outputInsertersPerAssembler; i++)
+				{
+					int index = rand() % availableInserters.size();
+					int inserterIndex = availableInserters[index];
+					availableInserters.erase(availableInserters.begin() + index);
+					assembler.inserters[inserterIndex] = InserterInstance{ item.first, false };
+				}
+
+				assemblers.push_back(assembler);
+			}
+		}
+
+		return std::make_shared<LSState>(problem, runConfig, assemblers);
 	}
+
+	LSState(const ProblemDefinition& problem, const RunConfig& runConfig, const std::vector<AssemblerInstance>& assemblers)
+		: problem(problem), runConfig(runConfig), assemblers(assemblers)
+	{}
 
 	float getCost() override
 	{
-		return 0;
+		if (costCalculated) return cost;
+
+		cost = 0.0f;
+
+		calculateWorld();
+		cost += worldCost;
+
+		costCalculated = true;
+		return cost;
 	}
 
 	std::vector<std::shared_ptr<LSState>> getNeighbors() override
 	{
-		// TODO:
-		// - Move assembler by 1 square
-		// - Move 1 inserter position
-		// - Swap assembler recipe
-		return {};
+		if (neighborsCalculated) return neighbors;
+
+		neighbors = std::vector<std::shared_ptr<LSState>>();
+
+		for (int i = 0; i < assemblers.size(); i++)
+		{
+			const AssemblerInstance& assembler = assemblers[i];
+
+			// Neighbour for moving each assembler in each direction
+			for (int j = 0; j < 4; j++)
+			{
+				Direction dir = static_cast<Direction>(j);
+				Coordinate offset = dirOffset(dir);
+				Coordinate newCoord = { assembler.coordinate.x + offset.x, assembler.coordinate.y + offset.y };
+
+				if (newCoord.x < 0 || newCoord.x >= problem.binWidth - 3 || newCoord.y < 0 || newCoord.y >= problem.binHeight - 3) continue;
+
+				std::vector<AssemblerInstance> newAssemblers = assemblers;
+				newAssemblers[i].coordinate = newCoord;
+				neighbors.push_back(getCached(std::make_shared<LSState>(problem, runConfig, newAssemblers)));
+			}
+
+			// Neighbour for moving an inserter from 1 slot to another on the same assembler
+			for (int j = 0; j < 12; j++)
+			{
+				const InserterInstance& inserter = assembler.inserters[j];
+				if (inserter.item == -1) continue;
+
+				for (int k = 0; k < 12; k++)
+				{
+					if (j == k) continue;
+					const InserterInstance& otherInserter = assembler.inserters[k];
+					if (otherInserter.item != -1) continue;
+
+					std::vector<AssemblerInstance> newAssemblers = assemblers;
+					newAssemblers[i].inserters[j] = InserterInstance{ -1, false };
+					newAssemblers[i].inserters[k] = inserter;
+					neighbors.push_back(getCached(std::make_shared<LSState>(problem, runConfig, newAssemblers)));
+				}
+			}
+		}
+
+		neighborsCalculated = true;
+		return neighbors;
 	}
 
-	bool operator==(LSState& other) const override { return false; }
-
-	static std::shared_ptr<LSState> createRandom(const RunConfig& runConfig)
+	bool operator==(LSState& other) const override
 	{
-		// TODO:
-		// - Generates assemblers with random inserter placement
-		// - Performs bin packing to find arrangement of assemblers
-		return std::make_shared<LSState>();
+		if (assemblers.size() != other.assemblers.size()) return false;
+
+		for (int i = 0; i < assemblers.size(); i++)
+		{
+			const AssemblerInstance& a = assemblers[i];
+			const AssemblerInstance& b = other.assemblers[i];
+
+			if (a.item != b.item || a.coordinate.x != b.coordinate.x || a.coordinate.y != b.coordinate.y) return false;
+
+			for (int j = 0; j < 12; j++)
+			{
+				const InserterInstance& aInserter = a.inserters[j];
+				const InserterInstance& bInserter = b.inserters[j];
+
+				if (aInserter.item != bInserter.item || aInserter.isInput != bInserter.isInput) return false;
+			}
+		}
+
+		return true;
+	}
+
+	bool getValid()
+	{
+		calculateWorld();
+		return isWorldValid;
+	}
+
+	void print()
+	{
+		calculateWorld();
+
+		for (int y = 0; y < problem.binHeight; y++)
+		{
+			for (int x = 0; x < problem.binWidth; x++)
+			{
+				if (world[x][y] == -1) std::cout << "\t-";
+				else std::cout << "\t" << world[x][y];
+			}
+			std::cout << std::endl;
+		}
+
+		std::cout << std::endl;
+
+		for (const auto& assembler : assemblers)
+		{
+			std::cout << "Assembler: " << assembler.item << " at (" << assembler.coordinate.x << ", " << assembler.coordinate.y << ")" << std::endl;
+			for (int i = 0; i < 12; i++)
+			{
+				const InserterInstance& inserter = assembler.inserters[i];
+				if (inserter.item != -1)
+				{
+					std::cout << "  Inserter: " << i << " item " << inserter.item << " at (" << assembler.coordinate.x + AssemblerInstance::inserterOffsets[i].x << ", " << assembler.coordinate.y + AssemblerInstance::inserterOffsets[i].y << ")" << std::endl;
+				}
+			}
+		}
+
+		std::cout << std::endl;
 	}
 
 private:
+	const ProblemDefinition& problem;
+	const RunConfig& runConfig;
 	std::vector<AssemblerInstance> assemblers;
+
+	bool costCalculated = false;
+	bool neighborsCalculated = false;
+	bool worldCalculated = false;
+	bool isWorldValid = false;
+
+	float cost = 0.0f;
+	std::vector<std::shared_ptr<LSState>> neighbors;
+	std::vector<std::vector<int>> world;
+	float worldCost = 0.0f;
+
+	void calculateWorld()
+	{
+		if (worldCalculated) return;
+
+		world = std::vector<std::vector<int>>(problem.binWidth, std::vector<int>(problem.binHeight, 0));
+
+		for (int x = 0; x < problem.binWidth; x++)
+		{
+			for (int y = 0; y < problem.binHeight; y++)
+			{
+				world[x][y] = -1;
+			}
+		}
+
+		for (const auto& assembler : assemblers)
+		{
+			for (int x = 0; x < 3; x++)
+			{
+				for (int y = 0; y < 3; y++)
+				{
+					int worldX = assembler.coordinate.x + x;
+					int worldY = assembler.coordinate.y + y;
+
+					if (world[worldX][worldY] != -1) worldCost += 1.0f;
+
+					world[worldX][worldY] = assembler.item;
+				}
+			}
+
+			for (int i = 0; i < 12; i++)
+			{
+				const InserterInstance& inserter = assembler.inserters[i];
+				if (inserter.item == -1) continue;
+
+				Coordinate offset = AssemblerInstance::inserterOffsets[i];
+				Coordinate coord = { assembler.coordinate.x + offset.x, assembler.coordinate.y + offset.y };
+
+				if (coord.x < 0 || coord.x >= problem.binWidth || coord.y < 0 || coord.y >= problem.binHeight)
+				{
+					worldCost += 1.0f;
+					continue;
+				}
+
+				if (world[coord.x][coord.y] != -1)
+				{
+					worldCost += 1.0f;
+				}
+
+				world[coord.x][coord.y] = inserter.item;
+			}
+		}
+
+		for (const auto& assembler : assemblers)
+		{
+			for (int i = 0; i < 12; i++)
+			{
+				const InserterInstance& inserter = assembler.inserters[i];
+				if (inserter.item == -1) continue;
+
+				Coordinate offset = AssemblerInstance::inserterOffsets[i];
+				Coordinate coord = { assembler.coordinate.x + offset.x, assembler.coordinate.y + offset.y };
+
+				Direction checkDir = AssemblerInstance::inserterDirections[i];
+				Coordinate checkOffset = dirOffset(checkDir);
+				Coordinate checkCoord = { coord.x + checkOffset.x, coord.y + checkOffset.y };
+
+				if (checkCoord.x < 0 || checkCoord.x >= problem.binWidth || checkCoord.y < 0 || checkCoord.y >= problem.binHeight)
+				{
+					worldCost += 1.0f;
+					continue;
+				}
+
+				if (world[checkCoord.x][checkCoord.y] != -1)
+				{
+					worldCost += 1.0f;
+				}
+			}
+		}
+
+		isWorldValid = false;
+		worldCalculated = true;
+	}
 };
 
-/*
-class ASNode {};
-
-struct ASPath
-{
-	Coordinate from;
-	Coordinate to;
-	bool isCalculated = false;
-	std::vector<ASNode> nodes;
-};
-
-struct CBPFState
-{
-	std::map<Coordinate, bool> blocked;
-	std::vector<ASPath> paths;
-};
-*/
-
-// ------------------------------------------------
+std::vector<std::shared_ptr<LSState>> LSState::cachedStates = std::vector<std::shared_ptr<LSState>>();
 
 class ProblemSolver
 {
@@ -181,23 +451,22 @@ public:
 	static constexpr float MAX_CONVEYOR_RATE = 45.0f;
 
 	// Produce a solver object with parameters then solve
-	static ProblemSolver solve(const std::map<int, Recipe>& recipes, const ProblemDefinition& problem)
+	static ProblemSolver solve(const ProblemDefinition& problem)
 	{
-		ProblemSolver solver(recipes, problem);
+		ProblemSolver solver(problem);
 		solver.solve();
 		return solver;
 	}
 
 private:
-	const std::map<int, Recipe>& recipes;
 	const ProblemDefinition& problem;
-
 	int componentItemCount = -1;
+	int bestRunConfig = -1;
 	std::map<int, ItemInfo> baseItemInfos;
 	std::map<int, RunConfig> possibleRunConfigs;
 
-	ProblemSolver(const std::map<int, Recipe>& recipes, const ProblemDefinition& problem)
-		: recipes(recipes), problem(problem)
+	ProblemSolver(const ProblemDefinition& problem)
+		: problem(problem)
 	{}
 
 	// Main logical solve function
@@ -209,8 +478,8 @@ private:
 		#endif
 
 		unravelRecipes();
-		int currentRunConfig = calculateRunConfigs();
-		performSearch(possibleRunConfigs[currentRunConfig]);
+		calculateRunConfigs();
+		performSearch();
 	}
 
 	// Unravel output item recipe to inputs
@@ -244,7 +513,7 @@ private:
 			<< std::endl << std::endl;
 
 		std::cout << "Problem Recipes: " << std::endl;
-		for (const auto& entry : recipes)
+		for (const auto& entry : problem.recipes)
 		{
 			const int item = entry.first;
 			const Recipe& recipe = entry.second;
@@ -266,9 +535,9 @@ private:
 
 		// Output has a recipe so add to stack with relative rate for 1 assembler
 		int outputItem = problem.itemOutput.item;
-		if (recipes.find(outputItem) != recipes.end())
+		if (problem.recipes.find(outputItem) != problem.recipes.end())
 		{
-			const auto& outputRecipe = recipes.at(outputItem);
+			const auto& outputRecipe = problem.recipes.at(outputItem);
 			recipeTraceStack.push({ outputItem, outputRecipe.rate * outputRecipe.quantity });
 		}
 
@@ -297,12 +566,12 @@ private:
 			if (isInput) continue;
 
 			// No recipe therefore impossible problem
-			if (recipes.find(current.item) == recipes.end())
+			if (problem.recipes.find(current.item) == problem.recipes.end())
 				throw std::exception(("- Component item (" + std::to_string(current.item) + ") has no recipe.").c_str());
 
 			// Has a recipe so recurse down
 			componentItemCount++;
-			const auto& currentRecipe = recipes.at(current.item);
+			const auto& currentRecipe = problem.recipes.at(current.item);
 			for (const auto& ingredient : currentRecipe.ingredients)
 			{
 				recipeTraceStack.push({ ingredient.item, ingredient.quantity * current.rate / currentRecipe.quantity });
@@ -327,7 +596,7 @@ private:
 	// Then calculate max possible, and work backwards
 	// Populates this->possibleRunConfigs
 	// Return maximum run config
-	int calculateRunConfigs()
+	void calculateRunConfigs()
 	{
 		#ifdef LOG
 		std::cout
@@ -361,7 +630,7 @@ private:
 				// If it is a component item calculate assemblers and inserters counts
 				if (itemInfo.isComponent)
 				{
-					const Recipe& itemRecipe = recipes.at(itemInfo.item);
+					const Recipe& itemRecipe = problem.recipes.at(itemInfo.item);
 					RunConfigItemInfo.assemblerCount = static_cast<int>(std::ceil(itemInfo.rate * i / (itemRecipe.quantity * itemRecipe.rate)));
 
 					int outputCount = static_cast<int>(std::ceil(itemInfo.rate * i / MAX_INSERTER_RATE));
@@ -407,7 +676,7 @@ private:
 		#endif
 
 		// Check space requirements for each
-		int bestRunConfig = -1;
+		bestRunConfig = -1;
 		size_t availableSpace = problem.binWidth * problem.binHeight - problem.itemInputs.size() - 1;
 		for (int i = maxSupportedCeil; i > 0; i--)
 		{
@@ -438,15 +707,13 @@ private:
 		#ifdef LOG
 		std::cout << "Found best run config: " << bestRunConfig << std::endl << std::endl;
 		#endif
-
-		return bestRunConfig;
 	}
 
 	// Perform the main search for a solution
 	// Top level local search with placement of assemblers / inserters
 	// Lower level conflict based search over orderings of paths
 	// Bottom level A* to find paths
-	void performSearch(const RunConfig& runConfig)
+	void performSearch()
 	{
 		#ifdef LOG
 		std::cout
@@ -455,11 +722,19 @@ private:
 			<< std::endl;
 		#endif
 
-		std::shared_ptr<LSState> initialState = LSState::createRandom(runConfig);
-		std::shared_ptr<LSState> finalState = ls::hillClimbing(initialState, 50);
+		for (int i = bestRunConfig; i > 0; i--)
+		{
+			const RunConfig& runConfig = possibleRunConfigs.at(i);
 
-		std::cout << "Cost: " << finalState->getCost() << std::endl;
-		std::cout << "Valid: " << finalState->isValid() << std::endl;
+			std::shared_ptr<LSState> initialState = LSState::createRandom(problem, runConfig);
+			std::shared_ptr<LSState> finalState = ls::hillClimbing(initialState, 100, true);
+			//std::shared_ptr<LSState> finalState = ls::simulatedAnnealing(initialState, 2.0f, 0.02f, 100, true);
+
+			#ifdef LOG
+			std::cout << "Run config " << i << " final state cost: " << finalState->getCost() << std::endl << std::endl;
+			finalState->print();
+			#endif
+		}
 	}
 };
 
@@ -467,6 +742,8 @@ private:
 
 int main()
 {
+	srand(0);
+
 	// Define main parameters
 	std::map<int, Recipe> recipes;
 	recipes[1] = { 1, 0.5f, { { 0, 1 } } };
@@ -474,11 +751,12 @@ int main()
 
 	// Define problem definition
 	ProblemDefinition problem = ProblemDefinitionFactory::create()
-		->setSize(7, 7)
+		->setRecipes(recipes)
+		->setSize(10, 10)
 		->addInputItem(0, 4.0f, 0, 1)
 		->addOutputItem(2, 6, 6)
 		->finalise();
 
 	// Run problem solver with given parameters
-	ProblemSolver solver = ProblemSolver::solve(recipes, problem);
+	ProblemSolver solver = ProblemSolver::solve(problem);
 }
