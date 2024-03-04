@@ -8,34 +8,25 @@ namespace ls
 	class State
 	{
 	public:
-		static size_t cachedSize() { return cachedStates.size(); }
-
 		static std::shared_ptr<T> getCached(std::shared_ptr<T> state)
 		{
-			const auto ptrEq = [&](std::shared_ptr<T>& other) { return *other == *state; };
-			auto it = std::find_if(cachedStates.begin(), cachedStates.end(), ptrEq);
-			if (it == cachedStates.end())
-			{
-				cachedStates.push_back(state);
-				return state;
-			}
-			else
-			{
-				return *it;
-			}
+			size_t hash = state->hash;
+			if (cachedStates.find(hash) == cachedStates.end()) cachedStates[hash] = state;
+			return cachedStates[hash];
 		}
 
-		static void clearCache()
-		{
-			cachedStates.clear();
-		}
+		static void clearCache() { cachedStates.clear(); }
+
+		static size_t getCacheSize() { return cachedStates.size(); }
+
+		bool operator==(State<T>& other) const { return hash == hash; }
 
 		virtual float getCost() = 0;
 		virtual std::vector<std::shared_ptr<T>> getNeighbors() = 0;
-		virtual bool operator==(T& other) const = 0;
 
 	protected:
-		static std::vector<std::shared_ptr<T>> cachedStates;
+		static std::map<size_t, std::shared_ptr<T>> cachedStates;
+		size_t hash = 0;
 	};
 
 	template<typename T>
@@ -48,31 +39,40 @@ namespace ls
 
 		// Until max iterations or local minimum
 		std::shared_ptr<T> current = start;
-		for (size_t it = 0; it < maxIterations; it++)
-		{
-			if (toLog) std::cout << "Iteration " << it << ": cost = " << current->getCost() << ", " << current->getNeighbors().size() << " neighbours." << std::endl;
+		std::shared_ptr<T> best = start;
 
+		if (toLog) std::cout << "Start, cost: " << current->getCost() << std::endl;
+
+		size_t it = 0;
+		for (; it < maxIterations; it++)
+		{
 			// Find best neighbour
 			std::shared_ptr<T> best = current;
 			for (std::shared_ptr<T>& neighbor : current->getNeighbors())
 			{
-				if (neighbor->getCost() < best->getCost()) best = neighbor;
+				if (neighbor->getCost() < best->getCost())
+				{
+					best = neighbor;
+				}
 			}
 
 			// Found local minimum
 			if (best == current)
 			{
-				if (toLog) std::cout << "Local minimum found." << std::endl;
+				if (toLog) std::cout << "It " << it << ", local minimum" << std::endl;
 				break;
 			}
 
 			// Move to best neighbour
-			if (toLog) std::cout << "Best: " << best->getCost() << std::endl;
+			if (toLog) std::cout << "It " << it << ", better cost: " << best->getCost() << std::endl;
 			current = best;
+
+			// Update best
+			if (current->getCost() < best->getCost()) best = current;
 		}
 
-		if (toLog) std::cout << "Hill Climbing: cost=" << current->getCost() << ", statesEvaluated=" << T::cachedSize() << std::endl << std::endl;
-		return current;
+		if (toLog) std::cout << "Finished " << it << " iterations, cost: " << best->getCost() << ", states evaluated: " << T::getCacheSize() << std::endl << std::endl;
+		return best;
 	}
 
 	template<typename T>
@@ -85,10 +85,13 @@ namespace ls
 
 		// Until max iterations or local minimum
 		std::shared_ptr<T> current = start;
-		for (size_t it = 0; it < maxIterations && temperature > 0.01f; it++)
-		{
-			if (toLog) std::cout << "\nIteration=" << it << ", temp=" << temperature << ": cost=" << current->getCost() << ", neighbours=" << current->getNeighbors().size() << "." << std::endl;
+		std::shared_ptr<T> best = start;
 
+		if (toLog) std::cout << "Start, cost: " << current->getCost() << std::endl;
+
+		size_t it = 0;
+		for (; it < maxIterations && temperature > 0.01f; it++)
+		{
 			// Find random neighbour
 			std::shared_ptr<T> next = current->getNeighbors()[rand() % current->getNeighbors().size()];
 			float delta = next->getCost() - current->getCost();
@@ -97,27 +100,28 @@ namespace ls
 			if (delta <= 0)
 			{
 				current = next;
-				if (toLog) std::cout << "Moved to better neighbour" << std::endl;
+				if (toLog) std::cout << "It " << it << ", better cost: " << next->getCost() << std::endl;
 			}
 
 			// If worse, accept with probability
 			else
 			{
 				float acceptanceProbability = exp(-delta / temperature);
-				if (toLog) std::cout << "Delta=" << delta << ", Acceptance=" << acceptanceProbability << " ";
 				if ((acceptanceProbability > (rand() / (float)RAND_MAX)))
 				{
 					current = next;
-					if (toLog) std::cout << "Moved to worse neighbour.";
+					if (toLog) std::cout << "It " << it << ", worse cost: " << next->getCost() << ", chance " << acceptanceProbability << std::endl;
 				}
-				if (toLog) std::cout << std::endl;
 			}
 
 			// Cool system
 			temperature *= 1 - coolingRate;
+
+			// Update best
+			if (current->getCost() < best->getCost()) best = current;
 		}
 
-		if (toLog) std::cout << "Annealing: cost=" << current->getCost() << ", statesEvaluated=" << T::cachedSize() << std::endl << std::endl;
-		return current;
+		if (toLog) std::cout << "Finished " << it << " iterations, cost: " << best->getCost() << ", states evaluated: " << T::getCacheSize() << std::endl << std::endl;
+		return best;
 	}
 }

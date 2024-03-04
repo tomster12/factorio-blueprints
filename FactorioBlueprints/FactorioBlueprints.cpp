@@ -11,17 +11,41 @@
 
 #define LOG
 
-struct Coordinate { int x = 0; int y = 0; };
+// ------------------------------------------------
 
 enum class Direction { UP, DOWN, LEFT, RIGHT };
 
-struct RecipeIngredient { int item = -1; int quantity = 0; };
+struct Coordinate
+{
+	int x = 0;
+	int y = 0;
+};
 
-struct Recipe { int quantity = 0; float rate = 0; std::vector<RecipeIngredient> ingredients; };
+struct RecipeIngredient
+{
+	int item = -1;
+	int quantity = 0;
+};
 
-struct ProblemItemInput { int item = -1; float rate = 0; Coordinate coordinate; };
+struct Recipe
+{
+	int quantity = 0;
+	float rate = 0;
+	std::vector<RecipeIngredient> ingredients;
+};
 
-struct ProblemItemOutput { int item = -1; Coordinate coordinate; };
+struct ProblemItemInput
+{
+	int item = -1;
+	float rate = 0;
+	Coordinate coordinate;
+};
+
+struct ProblemItemOutput
+{
+	int item = -1;
+	Coordinate coordinate;
+};
 
 struct ProblemDefinition
 {
@@ -108,7 +132,6 @@ struct InserterInstance
 {
 	int item = -1;
 	bool isInput = false;
-	int a = 1;
 };
 
 // An assembler placed in an LSState
@@ -166,61 +189,6 @@ Coordinate dirOffset(Direction dir)
 class LSState : public ls::State<LSState>
 {
 public:
-
-	static std::shared_ptr<LSState> createRandom(const ProblemDefinition& problem, const RunConfig& runConfig)
-	{
-		std::vector<AssemblerInstance> assemblers;
-
-		// For each item type
-		for (const auto& item : runConfig.itemInfos)
-		{
-			const RunConfigItemInfo& itemInfo = item.second;
-			if (itemInfo.assemblerCount == 0) continue;
-
-			// Randomly place assemblers
-			for (int i = 0; i < itemInfo.assemblerCount; i++)
-			{
-				Coordinate coord;
-				coord.x = rand() % (problem.binWidth - 2);
-				coord.y = rand() % (problem.binHeight - 2);
-				AssemblerInstance assembler{ item.first, coord };
-
-				// Available inserters for this assembler
-				std::vector<int> availableInserters(12);
-				for (int i = 0; i < 12; i++) availableInserters[i] = i;
-
-				// Randomly place input inserters
-				for (const auto& input : itemInfo.inputInsertersPerAssembler)
-				{
-					for (int i = 0; i < input.second; i++)
-					{
-						int index = rand() % availableInserters.size();
-						int inserterIndex = availableInserters[index];
-						availableInserters.erase(availableInserters.begin() + index);
-						assembler.inserters[inserterIndex] = InserterInstance{ input.first, true };
-					}
-				}
-
-				// Randomly place output inserters
-				for (int i = 0; i < itemInfo.outputInsertersPerAssembler; i++)
-				{
-					int index = rand() % availableInserters.size();
-					int inserterIndex = availableInserters[index];
-					availableInserters.erase(availableInserters.begin() + index);
-					assembler.inserters[inserterIndex] = InserterInstance{ item.first, false };
-				}
-
-				assemblers.push_back(assembler);
-			}
-		}
-
-		return std::make_shared<LSState>(problem, runConfig, assemblers);
-	}
-
-	LSState(const ProblemDefinition& problem, const RunConfig& runConfig, const std::vector<AssemblerInstance>& assemblers)
-		: problem(problem), runConfig(runConfig), assemblers(assemblers)
-	{}
-
 	float getCost() override
 	{
 		if (costCalculated) return cost;
@@ -282,27 +250,61 @@ public:
 		return neighbors;
 	}
 
-	bool operator==(LSState& other) const override
+public:
+	static std::shared_ptr<LSState> createRandom(const ProblemDefinition& problem, const RunConfig& runConfig)
 	{
-		if (assemblers.size() != other.assemblers.size()) return false;
+		std::vector<AssemblerInstance> assemblers;
 
-		for (int i = 0; i < assemblers.size(); i++)
+		// For each item type
+		for (const auto& item : runConfig.itemInfos)
 		{
-			const AssemblerInstance& a = assemblers[i];
-			const AssemblerInstance& b = other.assemblers[i];
+			const RunConfigItemInfo& itemInfo = item.second;
+			if (itemInfo.assemblerCount == 0) continue;
 
-			if (a.item != b.item || a.coordinate.x != b.coordinate.x || a.coordinate.y != b.coordinate.y) return false;
-
-			for (int j = 0; j < 12; j++)
+			// Randomly place assemblers
+			for (int i = 0; i < itemInfo.assemblerCount; i++)
 			{
-				const InserterInstance& aInserter = a.inserters[j];
-				const InserterInstance& bInserter = b.inserters[j];
+				Coordinate coord;
+				coord.x = rand() % (problem.binWidth - 2);
+				coord.y = rand() % (problem.binHeight - 2);
+				AssemblerInstance assembler{ item.first, coord };
 
-				if (aInserter.item != bInserter.item || aInserter.isInput != bInserter.isInput) return false;
+				// Available inserters for this assembler
+				std::vector<int> availableInserters(12);
+				for (int i = 0; i < 12; i++) availableInserters[i] = i;
+
+				// Randomly place input inserters
+				for (const auto& input : itemInfo.inputInsertersPerAssembler)
+				{
+					for (int i = 0; i < input.second; i++)
+					{
+						int index = rand() % availableInserters.size();
+						int inserterIndex = availableInserters[index];
+						availableInserters.erase(availableInserters.begin() + index);
+						assembler.inserters[inserterIndex] = InserterInstance{ input.first, true };
+					}
+				}
+
+				// Randomly place output inserters
+				for (int i = 0; i < itemInfo.outputInsertersPerAssembler; i++)
+				{
+					int index = rand() % availableInserters.size();
+					int inserterIndex = availableInserters[index];
+					availableInserters.erase(availableInserters.begin() + index);
+					assembler.inserters[inserterIndex] = InserterInstance{ item.first, false };
+				}
+
+				assemblers.push_back(assembler);
 			}
 		}
 
-		return true;
+		return std::make_shared<LSState>(problem, runConfig, assemblers);
+	}
+
+	LSState(const ProblemDefinition& problem, const RunConfig& runConfig, const std::vector<AssemblerInstance>& assemblers)
+		: problem(problem), runConfig(runConfig), assemblers(assemblers)
+	{
+		calculateHash();
 	}
 
 	bool getValid()
@@ -319,8 +321,20 @@ public:
 		{
 			for (int x = 0; x < problem.binWidth; x++)
 			{
-				if (world[x][y] == -1) std::cout << "\t-";
-				else std::cout << "\t" << world[x][y];
+				if (blockedGrid[x][y] == -1) std::cout << "\t-";
+				else std::cout << "\t" << blockedGrid[x][y];
+			}
+			std::cout << std::endl;
+		}
+
+		std::cout << std::endl;
+
+		for (int y = 0; y < problem.binHeight; y++)
+		{
+			for (int x = 0; x < problem.binWidth; x++)
+			{
+				if (itemGrid[x][y] == -1) std::cout << "\t-";
+				else std::cout << "\t" << itemGrid[x][y];
 			}
 			std::cout << std::endl;
 		}
@@ -355,38 +369,41 @@ private:
 
 	float cost = 0.0f;
 	std::vector<std::shared_ptr<LSState>> neighbors;
-	std::vector<std::vector<int>> world;
+	std::vector<std::vector<int>> blockedGrid;
+	std::vector<std::vector<int>> itemGrid;
 	float worldCost = 0.0f;
 
 	void calculateWorld()
 	{
 		if (worldCalculated) return;
 
-		world = std::vector<std::vector<int>>(problem.binWidth, std::vector<int>(problem.binHeight, 0));
+		blockedGrid = std::vector<std::vector<int>>(problem.binWidth, std::vector<int>(problem.binHeight, -1));
+		itemGrid = std::vector<std::vector<int>>(problem.binWidth, std::vector<int>(problem.binHeight, -1));
 
-		for (int x = 0; x < problem.binWidth; x++)
+		// Add input and output items to world
+		for (const auto& input : problem.itemInputs)
 		{
-			for (int y = 0; y < problem.binHeight; y++)
-			{
-				world[x][y] = -1;
-			}
+			itemGrid[input.second.coordinate.x][input.second.coordinate.y] = input.first;
 		}
+		itemGrid[problem.itemOutput.coordinate.x][problem.itemOutput.coordinate.y] = problem.itemOutput.item;
 
 		for (const auto& assembler : assemblers)
 		{
+			// Check each 3x3 area in each assembler for blocked
 			for (int x = 0; x < 3; x++)
 			{
 				for (int y = 0; y < 3; y++)
 				{
-					int worldX = assembler.coordinate.x + x;
-					int worldY = assembler.coordinate.y + y;
+					Coordinate coord = { assembler.coordinate.x + x, assembler.coordinate.y + y };
 
-					if (world[worldX][worldY] != -1) worldCost += 1.0f;
+					if (blockedGrid[coord.x][coord.y] != -1) worldCost += 1.0f;
+					if (itemGrid[coord.x][coord.y] != -1) worldCost += 1.0f;
 
-					world[worldX][worldY] = assembler.item;
+					blockedGrid[coord.x][coord.y] = 1;
 				}
 			}
 
+			// Check each of 12 inserter positions for blocked
 			for (int i = 0; i < 12; i++)
 			{
 				const InserterInstance& inserter = assembler.inserters[i];
@@ -401,25 +418,12 @@ private:
 					continue;
 				}
 
-				if (world[coord.x][coord.y] != -1)
-				{
-					worldCost += 1.0f;
-				}
+				if (blockedGrid[coord.x][coord.y] != -1) worldCost += 1.0f;
+				if (itemGrid[coord.x][coord.y] != -1) worldCost += 1.0f;
 
-				world[coord.x][coord.y] = inserter.item;
-			}
-		}
+				blockedGrid[coord.x][coord.y] = 1;
 
-		for (const auto& assembler : assemblers)
-		{
-			for (int i = 0; i < 12; i++)
-			{
-				const InserterInstance& inserter = assembler.inserters[i];
-				if (inserter.item == -1) continue;
-
-				Coordinate offset = AssemblerInstance::inserterOffsets[i];
-				Coordinate coord = { assembler.coordinate.x + offset.x, assembler.coordinate.y + offset.y };
-
+				// Check inserter open side for items or blocked
 				Direction checkDir = AssemblerInstance::inserterDirections[i];
 				Coordinate checkOffset = dirOffset(checkDir);
 				Coordinate checkCoord = { coord.x + checkOffset.x, coord.y + checkOffset.y };
@@ -430,19 +434,34 @@ private:
 					continue;
 				}
 
-				if (world[checkCoord.x][checkCoord.y] != -1)
-				{
-					worldCost += 1.0f;
-				}
+				if (blockedGrid[checkCoord.x][checkCoord.y] != -1) worldCost += 1.0f;
+				if (itemGrid[checkCoord.x][checkCoord.y] != -1 && itemGrid[checkCoord.x][checkCoord.y] != inserter.item) worldCost += 1.0f;
+
+				itemGrid[checkCoord.x][checkCoord.y] = inserter.item;
 			}
 		}
 
 		isWorldValid = false;
 		worldCalculated = true;
 	}
+
+	void calculateHash()
+	{
+		std::string hashString = "";
+		for (const auto& assembler : assemblers)
+		{
+			hashString += "(" + std::to_string(assembler.item) + "," + std::to_string(assembler.coordinate.x) + "," + std::to_string(assembler.coordinate.y) + ")";
+			for (int i = 0; i < 12; i++)
+			{
+				const InserterInstance& inserter = assembler.inserters[i];
+				hashString += "[" + std::to_string(inserter.item) + "," + std::to_string(inserter.isInput) + "]";
+			}
+		}
+		hash = std::hash<std::string>{}(hashString);
+	}
 };
 
-std::vector<std::shared_ptr<LSState>> LSState::cachedStates = std::vector<std::shared_ptr<LSState>>();
+std::map<size_t, std::shared_ptr<LSState>> LSState::cachedStates = std::map<size_t, std::shared_ptr<LSState>>();
 
 class ProblemSolver
 {
@@ -685,10 +704,10 @@ private:
 			for (const auto& item : runConfig.itemInfos)
 			{
 				requiredSpace += item.second.assemblerCount * 9;
-				requiredSpace += item.second.outputInsertersPerAssembler;
+				requiredSpace += item.second.assemblerCount * item.second.outputInsertersPerAssembler;
 				for (const auto& itemInput : item.second.inputInsertersPerAssembler)
 				{
-					requiredSpace += itemInput.second;
+					requiredSpace += item.second.assemblerCount * itemInput.second;
 				}
 			}
 
@@ -727,8 +746,7 @@ private:
 			const RunConfig& runConfig = possibleRunConfigs.at(i);
 
 			std::shared_ptr<LSState> initialState = LSState::createRandom(problem, runConfig);
-			std::shared_ptr<LSState> finalState = ls::hillClimbing(initialState, 100, true);
-			//std::shared_ptr<LSState> finalState = ls::simulatedAnnealing(initialState, 2.0f, 0.02f, 100, true);
+			std::shared_ptr<LSState> finalState = ls::simulatedAnnealing(initialState, 2.0f, 0.004f, 1000, true);
 
 			#ifdef LOG
 			std::cout << "Run config " << i << " final state cost: " << finalState->getCost() << std::endl << std::endl;
@@ -744,17 +762,16 @@ int main()
 {
 	srand(0);
 
-	// Define main parameters
+	// Define problem definition
 	std::map<int, Recipe> recipes;
 	recipes[1] = { 1, 0.5f, { { 0, 1 } } };
 	recipes[2] = { 1, 0.5f, { { 0, 2 }, { 1, 2 } } };
 
-	// Define problem definition
 	ProblemDefinition problem = ProblemDefinitionFactory::create()
 		->setRecipes(recipes)
-		->setSize(10, 10)
+		->setSize(8, 8)
 		->addInputItem(0, 4.0f, 0, 1)
-		->addOutputItem(2, 6, 6)
+		->addOutputItem(2, 7, 7)
 		->finalise();
 
 	// Run problem solver with given parameters
