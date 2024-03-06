@@ -1,3 +1,7 @@
+#define LOG
+#define NOMINMAX
+
+#include <windows.h>
 #include <iostream>
 #include <tuple>
 #include <map>
@@ -8,8 +12,6 @@
 
 #include "LocalSearch.h"
 #include "Pathfinding.h"
-
-#define LOG
 
 // ------------------------------------------------
 
@@ -145,6 +147,13 @@ struct AssemblerInstance
 	InserterInstance inserters[12];
 };
 
+struct ItemPathEnd
+{
+	int item;
+	bool isSource;
+	Coordinate coordinate;
+};
+
 const std::vector<Direction> AssemblerInstance::inserterDirections = {
 	Direction::UP, Direction::UP, Direction::UP,
 	Direction::RIGHT, Direction::RIGHT, Direction::RIGHT,
@@ -183,23 +192,26 @@ Coordinate dirOffset(Direction dir)
 	return { 0, 0 };
 }
 
+class CBPathfinding
+{};
+
 // A state represents a successfully placed set of assemblers / inserters
 // A valid state is one which delivers the output item
-// The cost of a state is determined by a CB pathfinding algorithm
+// The fitness of a state is determined by a CB pathfinding algorithm
 class LSState : public ls::State<LSState>
 {
 public:
-	float getCost() override
+	float getFitness() override
 	{
-		if (costCalculated) return cost;
+		if (costCalculated) return fitness;
 
-		cost = 0.0f;
+		fitness = 0.0f;
 
 		calculateWorld();
-		cost += worldCost;
+		fitness -= worldCost;
 
 		costCalculated = true;
-		return cost;
+		return fitness;
 	}
 
 	std::vector<std::shared_ptr<LSState>> getNeighbors() override
@@ -317,28 +329,34 @@ public:
 	{
 		calculateWorld();
 
-		for (int y = 0; y < problem.binHeight; y++)
-		{
-			for (int x = 0; x < problem.binWidth; x++)
-			{
-				if (blockedGrid[x][y] == -1) std::cout << "\t-";
-				else std::cout << "\t" << blockedGrid[x][y];
-			}
-			std::cout << std::endl;
-		}
-
-		std::cout << std::endl;
+		HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+		std::cout << "Testing" << std::endl;
 
 		for (int y = 0; y < problem.binHeight; y++)
 		{
 			for (int x = 0; x < problem.binWidth; x++)
 			{
-				if (itemGrid[x][y] == -1) std::cout << "\t-";
-				else std::cout << "\t" << itemGrid[x][y];
+				if (blockedGrid[x][y])
+				{
+					if (blockedGrid[x][y]) SetConsoleTextAttribute(hConsole, 15 + 1 * 16);
+					std::cout << blockedGrid[x][y];
+				}
+				else if (itemGrid[x][y] > -1)
+				{
+					SetConsoleTextAttribute(hConsole, 15 + 3 * 16);
+					std::cout << itemGrid[x][y];
+				}
+				else
+				{
+					SetConsoleTextAttribute(hConsole, 15);
+					std::cout << " ";
+				}
 			}
-			std::cout << std::endl;
+			SetConsoleTextAttribute(hConsole, 15);
+			std::cout << " " << std::endl;
 		}
 
+		SetConsoleTextAttribute(hConsole, 15);
 		std::cout << std::endl;
 
 		for (const auto& assembler : assemblers)
@@ -367,25 +385,29 @@ private:
 	bool worldCalculated = false;
 	bool isWorldValid = false;
 
-	float cost = 0.0f;
 	std::vector<std::shared_ptr<LSState>> neighbors;
-	std::vector<std::vector<int>> blockedGrid;
+	std::vector<ItemPathEnd> pathEnds;
+	std::vector<std::vector<bool>> blockedGrid;
 	std::vector<std::vector<int>> itemGrid;
 	float worldCost = 0.0f;
+	float fitness = 0.0f;
 
 	void calculateWorld()
 	{
 		if (worldCalculated) return;
 
-		blockedGrid = std::vector<std::vector<int>>(problem.binWidth, std::vector<int>(problem.binHeight, -1));
+		pathEnds = std::vector<ItemPathEnd>();
+		blockedGrid = std::vector<std::vector<bool>>(problem.binWidth, std::vector<bool>(problem.binHeight, false));
 		itemGrid = std::vector<std::vector<int>>(problem.binWidth, std::vector<int>(problem.binHeight, -1));
 
 		// Add input and output items to world
 		for (const auto& input : problem.itemInputs)
 		{
 			itemGrid[input.second.coordinate.x][input.second.coordinate.y] = input.first;
+			pathEnds.push_back({ input.first, true, input.second.coordinate });
 		}
 		itemGrid[problem.itemOutput.coordinate.x][problem.itemOutput.coordinate.y] = problem.itemOutput.item;
+		pathEnds.push_back({ problem.itemOutput.item, false, problem.itemOutput.coordinate });
 
 		for (const auto& assembler : assemblers)
 		{
@@ -396,10 +418,10 @@ private:
 				{
 					Coordinate coord = { assembler.coordinate.x + x, assembler.coordinate.y + y };
 
-					if (blockedGrid[coord.x][coord.y] != -1) worldCost += 1.0f;
+					if (blockedGrid[coord.x][coord.y]) worldCost += 1.0f;
 					if (itemGrid[coord.x][coord.y] != -1) worldCost += 1.0f;
 
-					blockedGrid[coord.x][coord.y] = 1;
+					blockedGrid[coord.x][coord.y] = true;
 				}
 			}
 
@@ -418,10 +440,10 @@ private:
 					continue;
 				}
 
-				if (blockedGrid[coord.x][coord.y] != -1) worldCost += 1.0f;
+				if (blockedGrid[coord.x][coord.y]) worldCost += 1.0f;
 				if (itemGrid[coord.x][coord.y] != -1) worldCost += 1.0f;
 
-				blockedGrid[coord.x][coord.y] = 1;
+				blockedGrid[coord.x][coord.y] = true;
 
 				// Check inserter open side for items or blocked
 				Direction checkDir = AssemblerInstance::inserterDirections[i];
@@ -434,10 +456,11 @@ private:
 					continue;
 				}
 
-				if (blockedGrid[checkCoord.x][checkCoord.y] != -1) worldCost += 1.0f;
+				if (blockedGrid[checkCoord.x][checkCoord.y]) worldCost += 1.0f;
 				if (itemGrid[checkCoord.x][checkCoord.y] != -1 && itemGrid[checkCoord.x][checkCoord.y] != inserter.item) worldCost += 1.0f;
 
 				itemGrid[checkCoord.x][checkCoord.y] = inserter.item;
+				pathEnds.push_back({ inserter.item, !inserter.isInput, checkCoord });
 			}
 		}
 
@@ -749,7 +772,7 @@ private:
 			std::shared_ptr<LSState> finalState = ls::simulatedAnnealing(initialState, 2.0f, 0.004f, 1000, true);
 
 			#ifdef LOG
-			std::cout << "Run config " << i << " final state cost: " << finalState->getCost() << std::endl << std::endl;
+			std::cout << "Run config " << i << " final state fitness: " << finalState->getFitness() << std::endl << std::endl;
 			finalState->print();
 			#endif
 		}
@@ -758,9 +781,92 @@ private:
 
 // ------------------------------------------------
 
+// The fitness of a state is determined by a CB pathfinding algorithm
+class PFState : public pf::State<PFState>
+{
+public:
+	bool operator==(PFState& other) const
+	{
+		return coordinate.x == other.coordinate.x && coordinate.y == other.coordinate.y && underground == other.underground;
+	}
+
+	float getCost(std::shared_ptr<PFState> target) override
+	{
+		if (costCalculated) return gCost + hCost;
+
+		hCost = pf::EuclideanDistance((float)coordinate.x, (float)coordinate.y, (float)target->getCoordinate().x, (float)target->getCoordinate().y);
+
+		return gCost + hCost;
+	}
+
+	std::vector<std::shared_ptr<PFState>> getNeighbors() override
+	{
+		if (neighborsCalculated) return neighbors;
+
+		neighbors = std::vector<std::shared_ptr<PFState>>();
+
+		neighborsCalculated = true;
+		return neighbors;
+	}
+
+	std::shared_ptr<PFState> getParent() override
+	{
+		return parent;
+	}
+
+public:
+	PFState(const std::vector<std::vector<bool>>& blockedGrid, Coordinate coordinate, bool underground)
+		: blockedGrid(blockedGrid), coordinate(coordinate), underground(underground)
+	{}
+
+	void setParent(std::shared_ptr<PFState> parent)
+	{
+		float parentGCost = parent->getGCost();
+		float parentDist = pf::EuclideanDistance((float)coordinate.x, (float)coordinate.y, (float)parent->getCoordinate().x, (float)parent->getCoordinate().y);
+		gCost = parent->getGCost() + parentDist;
+	}
+
+	Coordinate getCoordinate() const { return coordinate; }
+
+	bool getUnderground() const { return underground; }
+
+	float getGCost() const { return gCost; }
+
+private:
+	const std::vector<std::vector<bool>>& blockedGrid;
+	std::shared_ptr<PFState> parent;
+	Coordinate coordinate;
+	bool underground;
+
+	bool neighborsCalculated = false;
+	bool costCalculated = false;
+
+	std::vector<std::shared_ptr<PFState>> neighbors;
+	float gCost;
+	float hCost;
+};
+
 int main()
 {
 	srand(0);
+
+	const std::vector<std::vector<bool>> blockedGrid = {
+		{ false, false, true, false, false, false },
+		{ false, false, true, false, false, false },
+		{ false, false, false, false, true, false } };
+
+	std::shared_ptr<PFState> initialState = std::make_shared<PFState>(blockedGrid, Coordinate{ 0, 0 }, false);
+	std::shared_ptr<PFState> targetState = std::make_shared<PFState>(blockedGrid, Coordinate{ 2, 5 }, false);
+
+	std::vector<std::shared_ptr<PFState>> path = pf::asPathfinding(initialState, targetState, true);
+
+	// Print path
+	for (const auto& state : path)
+	{
+		std::cout << "State: (" << state->getCoordinate().x << ", " << state->getCoordinate().y << "), " << state->getUnderground() << std::endl;
+	}
+
+	return 0;
 
 	// Define problem definition
 	std::map<int, Recipe> recipes;
@@ -769,9 +875,9 @@ int main()
 
 	ProblemDefinition problem = ProblemDefinitionFactory::create()
 		->setRecipes(recipes)
-		->setSize(8, 8)
+		->setSize(10, 10)
 		->addInputItem(0, 4.0f, 0, 1)
-		->addOutputItem(2, 7, 7)
+		->addOutputItem(2, 9, 9)
 		->finalise();
 
 	// Run problem solver with given parameters

@@ -21,7 +21,7 @@ namespace ls
 
 		bool operator==(State<T>& other) const { return hash == hash; }
 
-		virtual float getCost() = 0;
+		virtual float getFitness() = 0;
 		virtual std::vector<std::shared_ptr<T>> getNeighbors() = 0;
 
 	protected:
@@ -37,11 +37,11 @@ namespace ls
 		T::clearCache();
 		T::getCached(start);
 
-		// Until max iterations or local minimum
+		// Until max iterations or local maximum
 		std::shared_ptr<T> current = start;
 		std::shared_ptr<T> best = start;
 
-		if (toLog) std::cout << "Start, cost: " << current->getCost() << std::endl;
+		if (toLog) std::cout << "Start, fitness: " << current->getFitness() << std::endl;
 
 		size_t it = 0;
 		for (; it < maxIterations; it++)
@@ -50,28 +50,28 @@ namespace ls
 			std::shared_ptr<T> best = current;
 			for (std::shared_ptr<T>& neighbor : current->getNeighbors())
 			{
-				if (neighbor->getCost() < best->getCost())
+				if (neighbor->getFitness() > best->getFitness())
 				{
 					best = neighbor;
 				}
 			}
 
-			// Found local minimum
+			// Found local maximum
 			if (best == current)
 			{
-				if (toLog) std::cout << "It " << it << ", local minimum" << std::endl;
+				if (toLog) std::cout << "It " << it << ", local maximum" << std::endl;
 				break;
 			}
 
 			// Move to best neighbour
-			if (toLog) std::cout << "It " << it << ", better cost: " << best->getCost() << std::endl;
+			if (toLog) std::cout << "It " << it << ", better fitness: " << best->getFitness() << std::endl;
 			current = best;
 
 			// Update best
-			if (current->getCost() < best->getCost()) best = current;
+			if (current->getFitness() > best->getFitness()) best = current;
 		}
 
-		if (toLog) std::cout << "Finished " << it << " iterations, cost: " << best->getCost() << ", states evaluated: " << T::getCacheSize() << std::endl << std::endl;
+		if (toLog) std::cout << "Finished " << it << " iterations, fitness: " << best->getFitness() << ", states evaluated: " << T::getCacheSize() << std::endl << std::endl;
 		return best;
 	}
 
@@ -83,34 +83,34 @@ namespace ls
 		T::clearCache();
 		T::getCached(start);
 
-		// Until max iterations or local minimum
+		// Until max iterations or local maximum
 		std::shared_ptr<T> current = start;
 		std::shared_ptr<T> best = start;
 
-		if (toLog) std::cout << "Start, cost: " << current->getCost() << std::endl;
+		if (toLog) std::cout << "Start, fitness: " << current->getFitness() << std::endl;
 
 		size_t it = 0;
 		for (; it < maxIterations && temperature > 0.01f; it++)
 		{
 			// Find random neighbour
 			std::shared_ptr<T> next = current->getNeighbors()[rand() % current->getNeighbors().size()];
-			float delta = next->getCost() - current->getCost();
+			float delta = next->getFitness() - current->getFitness();
 
 			// If better, move to neighbour
-			if (delta <= 0)
+			if (delta >= 0)
 			{
 				current = next;
-				if (toLog) std::cout << "It " << it << ", better cost: " << next->getCost() << std::endl;
+				if (toLog) std::cout << "It " << it << ", better fitness: " << next->getFitness() << std::endl;
 			}
 
 			// If worse, accept with probability
 			else
 			{
-				float acceptanceProbability = exp(-delta / temperature);
+				float acceptanceProbability = exp(delta / temperature);
 				if ((acceptanceProbability > (rand() / (float)RAND_MAX)))
 				{
 					current = next;
-					if (toLog) std::cout << "It " << it << ", worse cost: " << next->getCost() << ", chance " << acceptanceProbability << std::endl;
+					if (toLog) std::cout << "It " << it << ", worse fitness: " << next->getFitness() << ", chance " << acceptanceProbability << std::endl;
 				}
 			}
 
@@ -118,10 +118,10 @@ namespace ls
 			temperature *= 1 - coolingRate;
 
 			// Update best
-			if (current->getCost() < best->getCost()) best = current;
+			if (current->getFitness() > best->getFitness()) best = current;
 		}
 
-		if (toLog) std::cout << "Finished " << it << " iterations, cost: " << best->getCost() << ", states evaluated: " << T::getCacheSize() << std::endl << std::endl;
+		if (toLog) std::cout << "Finished " << it << " iterations, fitness: " << best->getFitness() << ", states evaluated: " << T::getCacheSize() << std::endl << std::endl;
 		return best;
 	}
 }
