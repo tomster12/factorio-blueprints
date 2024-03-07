@@ -214,11 +214,11 @@ public:
 		return fitness;
 	}
 
-	std::vector<std::shared_ptr<LSState>> getNeighbors() override
+	std::vector<std::shared_ptr<LSState>> getNeighbours() override
 	{
-		if (neighborsCalculated) return neighbors;
+		if (neighboursCalculated) return neighbours;
 
-		neighbors = std::vector<std::shared_ptr<LSState>>();
+		neighbours = std::vector<std::shared_ptr<LSState>>();
 
 		for (int i = 0; i < assemblers.size(); i++)
 		{
@@ -235,7 +235,7 @@ public:
 
 				std::vector<AssemblerInstance> newAssemblers = assemblers;
 				newAssemblers[i].coordinate = newCoord;
-				neighbors.push_back(getCached(std::make_shared<LSState>(problem, runConfig, newAssemblers)));
+				neighbours.push_back(getCached(std::make_shared<LSState>(problem, runConfig, newAssemblers)));
 			}
 
 			// Neighbour for moving an inserter from 1 slot to another on the same assembler
@@ -253,13 +253,13 @@ public:
 					std::vector<AssemblerInstance> newAssemblers = assemblers;
 					newAssemblers[i].inserters[j] = InserterInstance{ -1, false };
 					newAssemblers[i].inserters[k] = inserter;
-					neighbors.push_back(getCached(std::make_shared<LSState>(problem, runConfig, newAssemblers)));
+					neighbours.push_back(getCached(std::make_shared<LSState>(problem, runConfig, newAssemblers)));
 				}
 			}
 		}
 
-		neighborsCalculated = true;
-		return neighbors;
+		neighboursCalculated = true;
+		return neighbours;
 	}
 
 public:
@@ -381,11 +381,11 @@ private:
 	std::vector<AssemblerInstance> assemblers;
 
 	bool costCalculated = false;
-	bool neighborsCalculated = false;
+	bool neighboursCalculated = false;
 	bool worldCalculated = false;
 	bool isWorldValid = false;
 
-	std::vector<std::shared_ptr<LSState>> neighbors;
+	std::vector<std::shared_ptr<LSState>> neighbours;
 	std::vector<ItemPathEnd> pathEnds;
 	std::vector<std::vector<bool>> blockedGrid;
 	std::vector<std::vector<int>> itemGrid;
@@ -794,56 +794,67 @@ public:
 	{
 		if (costCalculated) return gCost + hCost;
 
-		hCost = pf::EuclideanDistance((float)coordinate.x, (float)coordinate.y, (float)target->getCoordinate().x, (float)target->getCoordinate().y);
+		if (parent == nullptr)
+		{
+			gCost = 0.0f;
+			hCost = 0.0f;
+		}
+		else
+		{
+			float coordDist = pf::EuclideanDistance((float)coordinate.x, (float)coordinate.y, (float)parent->coordinate.x, (float)parent->coordinate.y);
+			gCost = parent->gCost + coordDist;
+			hCost = pf::EuclideanDistance((float)coordinate.x, (float)coordinate.y, (float)target->getCoordinate().x, (float)target->getCoordinate().y);
+		}
 
+		costCalculated = true;
 		return gCost + hCost;
 	}
 
-	std::vector<std::shared_ptr<PFState>> getNeighbors() override
+	std::vector<std::shared_ptr<PFState>> getNeighbours() override
 	{
-		if (neighborsCalculated) return neighbors;
+		if (neighboursCalculated) return neighbours;
 
-		neighbors = std::vector<std::shared_ptr<PFState>>();
+		neighbours = std::vector<std::shared_ptr<PFState>>();
 
-		neighborsCalculated = true;
-		return neighbors;
-	}
+		// Add neighbours for each direction
+		for (int i = 0; i < 4; i++)
+		{
+			Direction dir = static_cast<Direction>(i);
+			Coordinate offset = dirOffset(dir);
+			Coordinate newCoord = { coordinate.x + offset.x, coordinate.y + offset.y };
 
-	std::shared_ptr<PFState> getParent() override
-	{
-		return parent;
+			if (newCoord.x < 0 || newCoord.x >= blockedGrid.size() || newCoord.y < 0 || newCoord.y >= blockedGrid[0].size()) continue;
+			if (blockedGrid[newCoord.x][newCoord.y]) continue;
+
+			neighbours.push_back(std::make_shared<PFState>(blockedGrid, newCoord, underground, std::make_shared<PFState>(*this)));
+		}
+
+		neighbours.push_back(std::make_shared<PFState>(blockedGrid, coordinate, !underground, std::make_shared<PFState>(*this)));
+
+		neighboursCalculated = true;
+		return neighbours;
 	}
 
 public:
-	PFState(const std::vector<std::vector<bool>>& blockedGrid, Coordinate coordinate, bool underground)
-		: blockedGrid(blockedGrid), coordinate(coordinate), underground(underground)
+	PFState(const std::vector<std::vector<bool>>& blockedGrid, Coordinate coordinate, bool underground, std::shared_ptr<PFState> parent = nullptr)
+		: blockedGrid(blockedGrid), coordinate(coordinate), underground(underground), pf::State<PFState>(parent)
 	{}
-
-	void setParent(std::shared_ptr<PFState> parent)
-	{
-		float parentGCost = parent->getGCost();
-		float parentDist = pf::EuclideanDistance((float)coordinate.x, (float)coordinate.y, (float)parent->getCoordinate().x, (float)parent->getCoordinate().y);
-		gCost = parent->getGCost() + parentDist;
-	}
 
 	Coordinate getCoordinate() const { return coordinate; }
 
 	bool getUnderground() const { return underground; }
 
-	float getGCost() const { return gCost; }
-
 private:
 	const std::vector<std::vector<bool>>& blockedGrid;
-	std::shared_ptr<PFState> parent;
 	Coordinate coordinate;
 	bool underground;
 
-	bool neighborsCalculated = false;
+	bool neighboursCalculated = false;
 	bool costCalculated = false;
 
-	std::vector<std::shared_ptr<PFState>> neighbors;
-	float gCost;
-	float hCost;
+	std::vector<std::shared_ptr<PFState>> neighbours;
+	float gCost = 0.0f;
+	float hCost = 0.0f;
 };
 
 int main()
@@ -861,7 +872,7 @@ int main()
 	std::vector<std::shared_ptr<PFState>> path = pf::asPathfinding(initialState, targetState, true);
 
 	// Print path
-	for (const auto& state : path)
+	for (std::shared_ptr<PFState> state : path)
 	{
 		std::cout << "State: (" << state->getCoordinate().x << ", " << state->getCoordinate().y << "), " << state->getUnderground() << std::endl;
 	}

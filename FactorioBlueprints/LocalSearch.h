@@ -22,7 +22,7 @@ namespace ls
 		bool operator==(State<T>& other) const { return hash == hash; }
 
 		virtual float getFitness() = 0;
-		virtual std::vector<std::shared_ptr<T>> getNeighbors() = 0;
+		virtual std::vector<std::shared_ptr<T>> getNeighbours() = 0;
 
 	protected:
 		static std::map<size_t, std::shared_ptr<T>> cachedStates;
@@ -48,7 +48,7 @@ namespace ls
 		{
 			// Find best neighbour
 			std::shared_ptr<T> best = current;
-			for (std::shared_ptr<T>& neighbor : current->getNeighbors())
+			for (std::shared_ptr<T>& neighbor : current->getNeighbours())
 			{
 				if (neighbor->getFitness() > best->getFitness())
 				{
@@ -93,7 +93,7 @@ namespace ls
 		for (; it < maxIterations && temperature > 0.01f; it++)
 		{
 			// Find random neighbour
-			std::shared_ptr<T> next = current->getNeighbors()[rand() % current->getNeighbors().size()];
+			std::shared_ptr<T> next = current->getNeighbours()[rand() % current->getNeighbours().size()];
 			float delta = next->getFitness() - current->getFitness();
 
 			// If better, move to neighbour
