@@ -15,7 +15,7 @@
 
 // ------------------------------------------------
 
-enum class Direction { UP, DOWN, LEFT, RIGHT };
+enum class Direction { N, S, W, E };
 
 struct Coordinate
 {
@@ -155,10 +155,10 @@ struct ItemPathEnd
 };
 
 const std::vector<Direction> AssemblerInstance::inserterDirections = {
-	Direction::UP, Direction::UP, Direction::UP,
-	Direction::RIGHT, Direction::RIGHT, Direction::RIGHT,
-	Direction::DOWN, Direction::DOWN, Direction::DOWN,
-	Direction::LEFT, Direction::LEFT, Direction::LEFT
+	Direction::N, Direction::N, Direction::N,
+	Direction::E, Direction::E, Direction::E,
+	Direction::S, Direction::S, Direction::S,
+	Direction::W, Direction::W, Direction::W
 };
 
 const std::vector<Coordinate> AssemblerInstance::inserterOffsets = {
@@ -172,25 +172,192 @@ Direction dirOpposite(Direction dir)
 {
 	switch (dir)
 	{
-	case Direction::UP: return Direction::DOWN;
-	case Direction::DOWN: return Direction::UP;
-	case Direction::LEFT: return Direction::RIGHT;
-	case Direction::RIGHT: return Direction::LEFT;
+	case Direction::N: return Direction::S;
+	case Direction::S: return Direction::N;
+	case Direction::W: return Direction::E;
+	case Direction::E: return Direction::W;
 	}
-	return Direction::UP;
+	return Direction::N;
 }
 
 Coordinate dirOffset(Direction dir)
 {
 	switch (dir)
 	{
-	case Direction::UP: return { 0, -1 };
-	case Direction::DOWN: return { 0, 1 };
-	case Direction::LEFT: return { -1, 0 };
-	case Direction::RIGHT: return { 1, 0 };
+	case Direction::N: return { 0, -1 };
+	case Direction::S: return { 0, 1 };
+	case Direction::W: return { -1, 0 };
+	case Direction::E: return { 1, 0 };
 	}
 	return { 0, 0 };
 }
+
+std::string dirString(Direction dir)
+{
+	switch (dir)
+	{
+	case Direction::N: return "N";
+	case Direction::S: return "S";
+	case Direction::W: return "W";
+	case Direction::E: return "E";
+	}
+	return "N";
+}
+
+// A state represents a position on the map with a belt type and direction
+// Used for pathfinding to find a path from one location to another
+class PFState : public pf::State<PFState>
+{
+public:
+	enum class BeltType { None, Conveyor, UndergroundEntrance, Underground, UndergroundExit };
+
+	bool operator==(PFState& other) const
+	{
+		return coordinate.x == other.coordinate.x && coordinate.y == other.coordinate.y && type == other.type && direction == other.direction;
+	}
+
+	float getCost(std::shared_ptr<PFState> goal) override
+	{
+		if (costCalculated) return gCost + hCost;
+
+		if (parent == nullptr) gCost = 0.0f;
+		else
+		{
+			float coordDist = pf::EuclideanDistance((float)coordinate.x, (float)coordinate.y, (float)parent->coordinate.x, (float)parent->coordinate.y);
+			if (type == BeltType::Underground || parent->type == BeltType::Underground) coordDist *= 0.5f;
+			gCost = parent->gCost + coordDist;
+		}
+
+		hCost = pf::EuclideanDistance((float)coordinate.x, (float)coordinate.y, (float)goal->coordinate.x, (float)goal->coordinate.y);
+
+		costCalculated = true;
+		return gCost + hCost;
+	}
+
+	bool isGoal(std::shared_ptr<PFState> goal) override
+	{
+		// Loose requirements for goal when using None
+		bool coordMatch = coordinate.x == goal->coordinate.x && coordinate.y == goal->coordinate.y;
+		bool aboveGroundMatch = type != BeltType::Underground; // true; // (type == BeltType::Underground) == (goal->type == BeltType::Underground);
+		return coordMatch && aboveGroundMatch;
+	}
+
+	std::vector<std::shared_ptr<PFState>> getNeighbours() override
+	{
+		if (neighboursCalculated) return neighbours;
+
+		neighbours = std::vector<std::shared_ptr<PFState>>();
+
+		if (type == BeltType::None)
+		{
+			// (4 directions, not blocked) None -> Conveyor | UndergroundEntrance
+			for (int i = 0; i < 4; i++)
+			{
+				if (!blockedGrid[coordinate.x][coordinate.y])
+				{
+					Direction newDirection = static_cast<Direction>(i);
+					neighbours.push_back(std::make_shared<PFState>(blockedGrid, coordinate, BeltType::Conveyor, newDirection, std::make_shared<PFState>(*this)));
+					neighbours.push_back(std::make_shared<PFState>(blockedGrid, coordinate, BeltType::UndergroundEntrance, newDirection, std::make_shared<PFState>(*this)));
+				}
+			}
+		}
+
+		else if (type == BeltType::Conveyor)
+		{
+			for (int i = 0; i < 4; i++)
+			{
+				// (3 directions, not blocked) Conveyor -> Conveyor | UndergroundEntrance
+				Direction newDirection = static_cast<Direction>(i);
+				if (newDirection == dirOpposite(direction)) continue;
+
+				Coordinate offset = dirOffset(newDirection);
+				Coordinate newCoord = { coordinate.x + offset.x, coordinate.y + offset.y };
+				if (newCoord.x < 0 || newCoord.x >= blockedGrid.size() || newCoord.y < 0 || newCoord.y >= blockedGrid[0].size()) continue;
+				if (blockedGrid[newCoord.x][newCoord.y]) continue;
+
+				neighbours.push_back(std::make_shared<PFState>(blockedGrid, newCoord, BeltType::Conveyor, newDirection, std::make_shared<PFState>(*this)));
+				neighbours.push_back(std::make_shared<PFState>(blockedGrid, newCoord, BeltType::UndergroundEntrance, newDirection, std::make_shared<PFState>(*this)));
+			}
+		}
+
+		else if (type == BeltType::UndergroundEntrance)
+		{
+			// (Forwards) UndergroundEntrance -> Underground
+			Coordinate offset = dirOffset(direction);
+			Coordinate newCoord = { coordinate.x + offset.x, coordinate.y + offset.y };
+
+			if (newCoord.x >= 0 && newCoord.x < blockedGrid.size() && newCoord.y >= 0 && newCoord.y < blockedGrid[0].size())
+			{
+				neighbours.push_back(std::make_shared<PFState>(blockedGrid, newCoord, BeltType::Underground, direction, std::make_shared<PFState>(*this)));
+
+				// (Forwards, not blocked) : UndergroundEntrance -> UndergroundExit
+				if (!blockedGrid[newCoord.x][newCoord.y])
+				{
+					neighbours.push_back(std::make_shared<PFState>(blockedGrid, newCoord, BeltType::UndergroundExit, direction, std::make_shared<PFState>(*this)));
+				}
+			}
+		}
+
+		else if (type == BeltType::Underground)
+		{
+			// (Forwards) Underground -> Underground
+			Coordinate offset = dirOffset(direction);
+			Coordinate newCoord = { coordinate.x + offset.x, coordinate.y + offset.y };
+
+			if (newCoord.x >= 0 && newCoord.x < blockedGrid.size() && newCoord.y >= 0 && newCoord.y < blockedGrid[0].size())
+			{
+				neighbours.push_back(std::make_shared<PFState>(blockedGrid, newCoord, BeltType::Underground, direction, std::make_shared<PFState>(*this)));
+
+				// (Forwards, not blocked) : Underground -> UndergroundExit
+				if (!blockedGrid[newCoord.x][newCoord.y])
+				{
+					neighbours.push_back(std::make_shared<PFState>(blockedGrid, newCoord, BeltType::UndergroundExit, direction, std::make_shared<PFState>(*this)));
+				}
+			}
+		}
+
+		else if (type == BeltType::UndergroundExit)
+		{
+			// (Forwards) UndergroundExit -> Conveyor | UndergroundEntrance
+			Coordinate offset = dirOffset(direction);
+			Coordinate newCoord = { coordinate.x + offset.x, coordinate.y + offset.y };
+
+			if (newCoord.x >= 0 && newCoord.x < blockedGrid.size() && newCoord.y >= 0 && newCoord.y < blockedGrid[0].size() && !blockedGrid[newCoord.x][newCoord.y])
+			{
+				neighbours.push_back(std::make_shared<PFState>(blockedGrid, newCoord, BeltType::Conveyor, direction, std::make_shared<PFState>(*this)));
+				neighbours.push_back(std::make_shared<PFState>(blockedGrid, newCoord, BeltType::UndergroundEntrance, direction, std::make_shared<PFState>(*this)));
+			}
+		}
+
+		neighboursCalculated = true;
+		return neighbours;
+	}
+
+public:
+	PFState(const std::vector<std::vector<bool>>& blockedGrid, Coordinate coordinate, BeltType type, Direction direction, std::shared_ptr<PFState> parent = nullptr)
+		: blockedGrid(blockedGrid), coordinate(coordinate), type(type), direction(direction), pf::State<PFState>(parent)
+	{}
+
+	void print()
+	{
+		std::string typeStr = type == BeltType::None ? "None" : type == BeltType::Conveyor ? "Conveyor" : type == BeltType::UndergroundEntrance ? "UndergroundEntrance" : type == BeltType::Underground ? "Underground" : "UndergroundExit";
+		std::cout << "State: (" << coordinate.x << ", " << coordinate.y << "), belt type: " << typeStr << ", direction: " << dirString(direction) << std::endl;
+	}
+
+private:
+	const std::vector<std::vector<bool>>& blockedGrid;
+
+	Coordinate coordinate;
+	BeltType type;
+	Direction direction;
+
+	bool neighboursCalculated = false;
+	bool costCalculated = false;
+
+	std::vector<std::shared_ptr<PFState>> neighbours;
+	float gCost = 0.0f;
+	float hCost = 0.0f;
+};
 
 class CBPathfinding
 {};
@@ -330,7 +497,6 @@ public:
 		calculateWorld();
 
 		HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-		std::cout << "Testing" << std::endl;
 
 		for (int y = 0; y < problem.binHeight; y++)
 		{
@@ -378,6 +544,7 @@ public:
 private:
 	const ProblemDefinition& problem;
 	const RunConfig& runConfig;
+
 	std::vector<AssemblerInstance> assemblers;
 
 	bool costCalculated = false;
@@ -769,7 +936,7 @@ private:
 			const RunConfig& runConfig = possibleRunConfigs.at(i);
 
 			std::shared_ptr<LSState> initialState = LSState::createRandom(problem, runConfig);
-			std::shared_ptr<LSState> finalState = ls::simulatedAnnealing(initialState, 2.0f, 0.004f, 1000, true);
+			std::shared_ptr<LSState> finalState = ls::simulatedAnnealing(initialState, 2.0f, 0.004f, 1000);
 
 			#ifdef LOG
 			std::cout << "Run config " << i << " final state fitness: " << finalState->getFitness() << std::endl << std::endl;
@@ -781,104 +948,8 @@ private:
 
 // ------------------------------------------------
 
-// The fitness of a state is determined by a CB pathfinding algorithm
-class PFState : public pf::State<PFState>
+void solveExampleProblem1()
 {
-public:
-	bool operator==(PFState& other) const
-	{
-		return coordinate.x == other.coordinate.x && coordinate.y == other.coordinate.y && underground == other.underground;
-	}
-
-	float getCost(std::shared_ptr<PFState> target) override
-	{
-		if (costCalculated) return gCost + hCost;
-
-		if (parent == nullptr)
-		{
-			gCost = 0.0f;
-			hCost = 0.0f;
-		}
-		else
-		{
-			float coordDist = pf::EuclideanDistance((float)coordinate.x, (float)coordinate.y, (float)parent->coordinate.x, (float)parent->coordinate.y);
-			gCost = parent->gCost + coordDist;
-			hCost = pf::EuclideanDistance((float)coordinate.x, (float)coordinate.y, (float)target->getCoordinate().x, (float)target->getCoordinate().y);
-		}
-
-		costCalculated = true;
-		return gCost + hCost;
-	}
-
-	std::vector<std::shared_ptr<PFState>> getNeighbours() override
-	{
-		if (neighboursCalculated) return neighbours;
-
-		neighbours = std::vector<std::shared_ptr<PFState>>();
-
-		// Add neighbours for each direction
-		for (int i = 0; i < 4; i++)
-		{
-			Direction dir = static_cast<Direction>(i);
-			Coordinate offset = dirOffset(dir);
-			Coordinate newCoord = { coordinate.x + offset.x, coordinate.y + offset.y };
-
-			if (newCoord.x < 0 || newCoord.x >= blockedGrid.size() || newCoord.y < 0 || newCoord.y >= blockedGrid[0].size()) continue;
-			if (blockedGrid[newCoord.x][newCoord.y]) continue;
-
-			neighbours.push_back(std::make_shared<PFState>(blockedGrid, newCoord, underground, std::make_shared<PFState>(*this)));
-		}
-
-		neighbours.push_back(std::make_shared<PFState>(blockedGrid, coordinate, !underground, std::make_shared<PFState>(*this)));
-
-		neighboursCalculated = true;
-		return neighbours;
-	}
-
-public:
-	PFState(const std::vector<std::vector<bool>>& blockedGrid, Coordinate coordinate, bool underground, std::shared_ptr<PFState> parent = nullptr)
-		: blockedGrid(blockedGrid), coordinate(coordinate), underground(underground), pf::State<PFState>(parent)
-	{}
-
-	Coordinate getCoordinate() const { return coordinate; }
-
-	bool getUnderground() const { return underground; }
-
-private:
-	const std::vector<std::vector<bool>>& blockedGrid;
-	Coordinate coordinate;
-	bool underground;
-
-	bool neighboursCalculated = false;
-	bool costCalculated = false;
-
-	std::vector<std::shared_ptr<PFState>> neighbours;
-	float gCost = 0.0f;
-	float hCost = 0.0f;
-};
-
-int main()
-{
-	srand(0);
-
-	const std::vector<std::vector<bool>> blockedGrid = {
-		{ false, false, true, false, false, false },
-		{ false, false, true, false, false, false },
-		{ false, false, false, false, true, false } };
-
-	std::shared_ptr<PFState> initialState = std::make_shared<PFState>(blockedGrid, Coordinate{ 0, 0 }, false);
-	std::shared_ptr<PFState> targetState = std::make_shared<PFState>(blockedGrid, Coordinate{ 2, 5 }, false);
-
-	std::vector<std::shared_ptr<PFState>> path = pf::asPathfinding(initialState, targetState, true);
-
-	// Print path
-	for (std::shared_ptr<PFState> state : path)
-	{
-		std::cout << "State: (" << state->getCoordinate().x << ", " << state->getCoordinate().y << "), " << state->getUnderground() << std::endl;
-	}
-
-	return 0;
-
 	// Define problem definition
 	std::map<int, Recipe> recipes;
 	recipes[1] = { 1, 0.5f, { { 0, 1 } } };
@@ -893,4 +964,59 @@ int main()
 
 	// Run problem solver with given parameters
 	ProblemSolver solver = ProblemSolver::solve(problem);
+}
+
+void checkPathfinding()
+{
+	// Mock example pathfinding problem grid
+	const std::vector<std::vector<bool>> blockedGrid = {
+		{ false, false, true, true, false, false, false },
+		{ false, false, true, true, false, false, false },
+		{ false, false, false, false, false, true, false } };
+
+	// Perform pathfinding
+	std::shared_ptr<PFState> initialState = std::make_shared<PFState>(blockedGrid, Coordinate{ 0, 0 }, PFState::BeltType::None, Direction::E);
+	std::shared_ptr<PFState> goalState = std::make_shared<PFState>(blockedGrid, Coordinate{ 2, 6 }, PFState::BeltType::None, Direction::E);
+	std::vector<std::shared_ptr<PFState>> path = pf::asPathfinding(initialState, goalState, true);
+
+	// Print path
+	for (std::shared_ptr<PFState> state : path) state->print();
+}
+
+void checkCBPathfinding()
+{
+	// Define problem definition from example 1
+	std::map<int, Recipe> recipes;
+	recipes[1] = { 1, 0.5f, { { 0, 1 } } };
+	recipes[2] = { 1, 0.5f, { { 0, 2 }, { 1, 2 } } };
+
+	ProblemDefinition problem = ProblemDefinitionFactory::create()
+		->setRecipes(recipes)
+		->setSize(10, 10)
+		->addInputItem(0, 4.0f, 0, 1)
+		->addOutputItem(2, 9, 9)
+		->finalise();
+
+	// Setup example local search state
+	RunConfig runConfig;
+	runConfig.outputAssemblerCount = 1;
+	runConfig.itemInfos[1] = { 1, 2, 1, { { 0, 1 } } };
+	runConfig.itemInfos[2] = { 2, 1, 1, { { 0, 1 }, { 1, 1 } } };
+
+	InserterInstance none{ -1, false };
+	std::vector<AssemblerInstance> assemblers;
+	assemblers.push_back({ 1, { 5, 0 }, { none, none, none, none, none, { 1, false }, { 0, true }, none, none, none, none, none } });
+	assemblers.push_back({ 1, { 3, 7 }, { none, none, none, { 0, true }, none, none, none, none, none, none, none, { 1, false } } });
+	assemblers.push_back({ 2, { 2, 4 }, { none, none, { 0, true }, { 2, false }, none, none, none, none, none, none, { 1, true }, none } });
+
+	std::shared_ptr<LSState> state = std::make_shared<LSState>(problem, runConfig, assemblers);
+
+	// Print state
+	state->print();
+}
+
+void main()
+{
+	srand(0);
+	checkCBPathfinding();
 }

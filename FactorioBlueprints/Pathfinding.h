@@ -14,7 +14,8 @@ namespace pf
 	{
 	public:
 		virtual bool operator==(T& other) const = 0;
-		virtual float getCost(std::shared_ptr<T> target) = 0;
+		virtual float getCost(std::shared_ptr<T> goal) = 0;
+		virtual bool isGoal(std::shared_ptr<T> goal) = 0;
 		virtual std::vector<std::shared_ptr<T>> getNeighbours() = 0;
 		virtual std::shared_ptr<T> getParent() const { return parent; }
 
@@ -48,7 +49,7 @@ namespace pf
 			}
 
 			// Found goal
-			if (*current == *goal)
+			if (current->isGoal(goal))
 			{
 				std::shared_ptr<T> node = current;
 				while (node != nullptr)
