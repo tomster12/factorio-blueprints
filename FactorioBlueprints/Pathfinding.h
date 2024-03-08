@@ -29,7 +29,7 @@ namespace pf
 	{
 		static_assert(std::is_base_of<State<T>, T>::value, "T must be a subclass of State<T>.");
 
-		// A* Pathfinding Algorithm
+		// Start open set with start node
 		std::vector<std::shared_ptr<T>> path;
 		std::set<std::shared_ptr<T>> closedSet;
 		std::set<std::shared_ptr<T>> openSet;
@@ -61,18 +61,13 @@ namespace pf
 				return path;
 			}
 
-			// Remove current from open set and add to closed set
 			openSet.erase(current);
 			closedSet.insert(current);
 
-			// For each neighbor
+			// Add neighbors to open if not in open or closed set
 			for (std::shared_ptr<T> neighbor : current->getNeighbours())
 			{
-				// Skip if neighbor is in closed set
-				// Find needs to dereference the shared_ptr
 				if (std::find_if(closedSet.begin(), closedSet.end(), [&neighbor](const std::shared_ptr<T>& node) { return *node == *neighbor; }) != closedSet.end()) continue;
-
-				// Add neighbor to open set if not already there
 				if (std::find_if(openSet.begin(), openSet.end(), [&neighbor](const std::shared_ptr<T>& node) { return *node == *neighbor; }) == openSet.end()) openSet.insert(neighbor);
 			}
 		}

@@ -23,6 +23,42 @@ struct Coordinate
 	int y = 0;
 };
 
+Direction dirOpposite(Direction dir)
+{
+	switch (dir)
+	{
+	case Direction::N: return Direction::S;
+	case Direction::S: return Direction::N;
+	case Direction::W: return Direction::E;
+	case Direction::E: return Direction::W;
+	}
+	return Direction::N;
+}
+
+Coordinate dirOffset(Direction dir)
+{
+	switch (dir)
+	{
+	case Direction::N: return { 0, -1 };
+	case Direction::S: return { 0, 1 };
+	case Direction::W: return { -1, 0 };
+	case Direction::E: return { 1, 0 };
+	}
+	return { 0, 0 };
+}
+
+std::string dirString(Direction dir)
+{
+	switch (dir)
+	{
+	case Direction::N: return "N";
+	case Direction::S: return "S";
+	case Direction::W: return "W";
+	case Direction::E: return "E";
+	}
+	return "N";
+}
+
 struct RecipeIngredient
 {
 	int item = -1;
@@ -147,13 +183,6 @@ struct AssemblerInstance
 	InserterInstance inserters[12];
 };
 
-struct ItemPathEnd
-{
-	int item;
-	bool isSource;
-	Coordinate coordinate;
-};
-
 const std::vector<Direction> AssemblerInstance::inserterDirections = {
 	Direction::N, Direction::N, Direction::N,
 	Direction::E, Direction::E, Direction::E,
@@ -168,41 +197,12 @@ const std::vector<Coordinate> AssemblerInstance::inserterOffsets = {
 	{ -1, 2 }, { -1, 1 }, { -1, 0 }
 };
 
-Direction dirOpposite(Direction dir)
+struct ItemPathEnd
 {
-	switch (dir)
-	{
-	case Direction::N: return Direction::S;
-	case Direction::S: return Direction::N;
-	case Direction::W: return Direction::E;
-	case Direction::E: return Direction::W;
-	}
-	return Direction::N;
-}
-
-Coordinate dirOffset(Direction dir)
-{
-	switch (dir)
-	{
-	case Direction::N: return { 0, -1 };
-	case Direction::S: return { 0, 1 };
-	case Direction::W: return { -1, 0 };
-	case Direction::E: return { 1, 0 };
-	}
-	return { 0, 0 };
-}
-
-std::string dirString(Direction dir)
-{
-	switch (dir)
-	{
-	case Direction::N: return "N";
-	case Direction::S: return "S";
-	case Direction::W: return "W";
-	case Direction::E: return "E";
-	}
-	return "N";
-}
+	int item;
+	bool isSource;
+	Coordinate coordinate;
+};
 
 // A state represents a position on the map with a belt type and direction
 // Used for pathfinding to find a path from one location to another
@@ -224,7 +224,7 @@ public:
 		else
 		{
 			float coordDist = pf::EuclideanDistance((float)coordinate.x, (float)coordinate.y, (float)parent->coordinate.x, (float)parent->coordinate.y);
-			if (type == BeltType::Underground || parent->type == BeltType::Underground) coordDist *= 0.5f;
+			if ((type == BeltType::Underground) || (parent->type == BeltType::Underground)) coordDist *= 0.5f;
 			gCost = parent->gCost + coordDist;
 		}
 
@@ -359,8 +359,32 @@ private:
 	float hCost = 0.0f;
 };
 
+// Used by the LSState to perform multi-agent pathfinding
 class CBPathfinding
-{};
+{
+public:
+	CBPathfinding(const std::vector<std::vector<bool>>& blockedGrid, const std::vector<ItemPathEnd>& pathEnds)
+		: blockedGrid(blockedGrid), pathEnds(pathEnds)
+	{}
+
+	void solve()
+	{
+		// Print out path ends
+		for (const auto& pathEnd : pathEnds)
+		{
+			std::cout << "Path end: " << pathEnd.item << " at (" << pathEnd.coordinate.x << ", " << pathEnd.coordinate.y << ") " << (pathEnd.isSource ? "source" : "destination") << std::endl;
+		}
+
+		fitness = 0.0f;
+	}
+
+	float getFitness() const { return fitness; }
+
+private:
+	const std::vector<std::vector<bool>>& blockedGrid;
+	const std::vector<ItemPathEnd>& pathEnds;
+	float fitness = 0.0f;
+};
 
 // A state represents a successfully placed set of assemblers / inserters
 // A valid state is one which delivers the output item
@@ -376,6 +400,13 @@ public:
 
 		calculateWorld();
 		fitness -= worldCost;
+
+		if (isWorldValid)
+		{
+			pathfinding = std::make_shared<CBPathfinding>(blockedGrid, pathEnds);
+			pathfinding->solve();
+			fitness += pathfinding->getFitness();
+		}
 
 		costCalculated = true;
 		return fitness;
@@ -553,10 +584,11 @@ private:
 	bool isWorldValid = false;
 
 	std::vector<std::shared_ptr<LSState>> neighbours;
-	std::vector<ItemPathEnd> pathEnds;
 	std::vector<std::vector<bool>> blockedGrid;
 	std::vector<std::vector<int>> itemGrid;
+	std::vector<ItemPathEnd> pathEnds;
 	float worldCost = 0.0f;
+	std::shared_ptr<CBPathfinding> pathfinding;
 	float fitness = 0.0f;
 
 	void calculateWorld()
@@ -631,7 +663,7 @@ private:
 			}
 		}
 
-		isWorldValid = false;
+		isWorldValid = worldCost == 0.0f;
 		worldCalculated = true;
 	}
 
@@ -1010,12 +1042,13 @@ void checkCBPathfinding()
 	assemblers.push_back({ 2, { 2, 4 }, { none, none, { 0, true }, { 2, false }, none, none, none, none, none, none, { 1, true }, none } });
 
 	std::shared_ptr<LSState> state = std::make_shared<LSState>(problem, runConfig, assemblers);
-
-	// Print state
 	state->print();
+
+	// Request cost to trigger pathfinding
+	std::cout << "\nState fitness: " << state->getFitness() << std::endl;
 }
 
-void main()
+int main()
 {
 	srand(0);
 	checkCBPathfinding();

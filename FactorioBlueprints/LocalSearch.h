@@ -34,15 +34,14 @@ namespace ls
 	{
 		static_assert(std::is_base_of<State<T>, T>::value, "T must be a subclass of State<T>.");
 
+		// Initialize with start state
 		T::clearCache();
 		T::getCached(start);
-
-		// Until max iterations or local maximum
 		std::shared_ptr<T> current = start;
-		std::shared_ptr<T> best = start;
-
 		if (toLog) std::cout << "Start, fitness: " << current->getFitness() << std::endl;
 
+		// Until max iterations or local maximum
+		std::shared_ptr<T> best = start;
 		size_t it = 0;
 		for (; it < maxIterations; it++)
 		{
@@ -82,14 +81,12 @@ namespace ls
 
 		T::clearCache();
 		T::getCached(start);
-
-		// Until max iterations or local maximum
 		std::shared_ptr<T> current = start;
-		std::shared_ptr<T> best = start;
-
 		if (toLog) std::cout << "Start, fitness: " << current->getFitness() << std::endl;
 
+		// Until max iterations or local maximum
 		size_t it = 0;
+		std::shared_ptr<T> best = start;
 		for (; it < maxIterations && temperature > 0.01f; it++)
 		{
 			// Find random neighbour
@@ -114,7 +111,7 @@ namespace ls
 				}
 			}
 
-			// Cool system
+			// Cool system temperature
 			temperature *= 1 - coolingRate;
 
 			// Update best
