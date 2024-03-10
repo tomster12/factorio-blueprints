@@ -926,7 +926,7 @@ private:
 			for (const auto& item : runConfig.itemInfos)
 			{
 				requiredSpace += item.second.assemblerCount * 9;
-				requiredSpace += item.second.assemblerCount * item.second.outputInsertersPerAssembler;
+				requiredSpace += item.second.assemblerCount * item.second.outputInsertersPerAssembler * 2;
 				for (const auto& itemInput : item.second.inputInsertersPerAssembler)
 				{
 					requiredSpace += item.second.assemblerCount * itemInput.second;
