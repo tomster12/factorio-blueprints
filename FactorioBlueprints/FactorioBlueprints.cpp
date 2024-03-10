@@ -15,6 +15,117 @@
 
 // ------------------------------------------------
 
+/* Pseudocode 1
+struct RecipeTrace
+{
+	int item;
+	float rate;
+};
+
+std::stack<RecipeTrace> stack
+
+if outputItem in recipes:
+	stack.push({ outputItem, recipes[outputItem].rate * recipes[outputItem].quantity });
+
+else if outputItem in inputs:
+	stack.push({ outputItem, 0.0f });
+
+else:
+	throw "Output item has no recipe nor is an input";
+
+while stack.size() > 0:
+	current = stack.pop();
+
+	baseItemInfos[current.item].rate += current.rate;
+
+	if current.item in isInput:
+		continue
+
+	if current.item not in recipes:
+		throw "Component item has no recipe";
+
+	for ingredient in recipes[current.item].ingredients:
+		stack.push({ ingredient.item, ingredient.quantity * current.rate / recipes[current.item].quantity });
+*/
+
+/* Pseudocode 2
+C++
+float maxSupported = 0.0f;
+for (const auto& input : problem.itemInputs)
+{
+	const ProblemItemInput& inputItem = input.second;
+	const auto& itemInfo = baseItemInfos.at(inputItem.item);
+	float itemsSupportedCount = inputItem.rate / itemInfo.rate;
+	maxSupported = std::max(maxSupported, itemsSupportedCount);
+}
+int maxSupportedCeil = static_cast<int>(std::ceil(maxSupported));
+
+for (int i = maxSupportedCeil; i > 0; i--)
+{
+	RunConfig runConfig;
+	runConfig.outputAssemblerCount = i;
+
+	for (const auto& item : baseItemInfos)
+	{
+		const ItemInfo& itemInfo = item.second;
+		RunConfigItemInfo RunConfigItemInfo{ itemInfo.item };
+
+		// If it is a component item calculate assemblers and inserters counts
+		if (itemInfo.isComponent)
+		{
+			const Recipe& itemRecipe = problem.recipes.at(itemInfo.item);
+			RunConfigItemInfo.assemblerCount = static_cast<int>(std::ceil(itemInfo.rate * i / (itemRecipe.quantity * itemRecipe.rate)));
+
+			int outputCount = static_cast<int>(std::ceil(itemInfo.rate * i / MAX_INSERTER_RATE));
+			RunConfigItemInfo.outputInsertersPerAssembler = outputCount;
+
+			for (const auto& input : itemRecipe.ingredients)
+			{
+				int inputCount = static_cast<int>(std::ceil(input.quantity * (itemInfo.rate / itemRecipe.quantity) * i / MAX_INSERTER_RATE));
+				RunConfigItemInfo.inputInsertersPerAssembler[input.item] = inputCount;
+			}
+		}
+
+		runConfig.itemInfos[itemInfo.item] = RunConfigItemInfo;
+	}
+
+	possibleRunConfigs[i] = runConfig;
+}
+*/
+
+/* Pseudocode 3
+C++
+bestRunConfig = -1;
+size_t availableSpace = problem.blueprintWidth * problem.blueprintHeight - problem.itemInputs.size() - 1;
+for (int i = maxSupportedCeil; i > 0; i--)
+{
+	const auto& runConfig = possibleRunConfigs[i];
+	size_t requiredSpace = 0;
+	for (const auto& item : runConfig.itemInfos)
+	{
+		requiredSpace += item.second.assemblerCount * 9;
+		requiredSpace += item.second.assemblerCount * item.second.outputInsertersPerAssembler * 2;
+		for (const auto& itemInput : item.second.inputInsertersPerAssembler)
+		{
+			requiredSpace += item.second.assemblerCount * itemInput.second;
+		}
+	}
+
+	#ifdef LOG
+	std::cout << "Run config " << i << " required space: " << requiredSpace << " / " << availableSpace << std::endl;
+	#endif
+
+	// Have found the highest run config so break out
+	if (requiredSpace <= availableSpace)
+	{
+		bestRunConfig = i;
+		break;
+	}
+}
+*/
+
+// ------------------------------------------------
+
 enum class Direction { N, S, W, E };
 
 struct Coordinate
@@ -87,8 +198,8 @@ struct ProblemItemOutput
 
 struct ProblemDefinition
 {
-	int binWidth = -1;
-	int binHeight = -1;
+	int blueprintWidth = -1;
+	int blueprintHeight = -1;
 	std::map<int, Recipe> recipes;
 	std::map<int, ProblemItemInput> itemInputs;
 	ProblemItemOutput itemOutput;
@@ -108,10 +219,10 @@ public:
 		return this;
 	}
 
-	ProblemDefinitionFactory* setSize(int binWidth, int binHeight)
+	ProblemDefinitionFactory* setSize(int blueprintWidth, int blueprintHeight)
 	{
-		problemDefinition.binWidth = binWidth;
-		problemDefinition.binHeight = binHeight;
+		problemDefinition.blueprintWidth = blueprintWidth;
+		problemDefinition.blueprintHeight = blueprintHeight;
 		return this;
 	}
 
@@ -429,7 +540,7 @@ public:
 				Coordinate offset = dirOffset(dir);
 				Coordinate newCoord = { assembler.coordinate.x + offset.x, assembler.coordinate.y + offset.y };
 
-				if (newCoord.x < 0 || newCoord.x >= problem.binWidth - 3 || newCoord.y < 0 || newCoord.y >= problem.binHeight - 3) continue;
+				if (newCoord.x < 0 || newCoord.x >= problem.blueprintWidth - 3 || newCoord.y < 0 || newCoord.y >= problem.blueprintHeight - 3) continue;
 
 				std::vector<AssemblerInstance> newAssemblers = assemblers;
 				newAssemblers[i].coordinate = newCoord;
@@ -475,8 +586,8 @@ public:
 			for (int i = 0; i < itemInfo.assemblerCount; i++)
 			{
 				Coordinate coord;
-				coord.x = rand() % (problem.binWidth - 2);
-				coord.y = rand() % (problem.binHeight - 2);
+				coord.x = rand() % (problem.blueprintWidth - 2);
+				coord.y = rand() % (problem.blueprintHeight - 2);
 				AssemblerInstance assembler{ item.first, coord };
 
 				// Available inserters for this assembler
@@ -529,9 +640,9 @@ public:
 
 		HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 
-		for (int y = 0; y < problem.binHeight; y++)
+		for (int y = 0; y < problem.blueprintHeight; y++)
 		{
-			for (int x = 0; x < problem.binWidth; x++)
+			for (int x = 0; x < problem.blueprintWidth; x++)
 			{
 				if (blockedGrid[x][y])
 				{
@@ -596,8 +707,8 @@ private:
 		if (worldCalculated) return;
 
 		pathEnds = std::vector<ItemPathEnd>();
-		blockedGrid = std::vector<std::vector<bool>>(problem.binWidth, std::vector<bool>(problem.binHeight, false));
-		itemGrid = std::vector<std::vector<int>>(problem.binWidth, std::vector<int>(problem.binHeight, -1));
+		blockedGrid = std::vector<std::vector<bool>>(problem.blueprintWidth, std::vector<bool>(problem.blueprintHeight, false));
+		itemGrid = std::vector<std::vector<int>>(problem.blueprintWidth, std::vector<int>(problem.blueprintHeight, -1));
 
 		// Add input and output items to world
 		for (const auto& input : problem.itemInputs)
@@ -633,7 +744,7 @@ private:
 				Coordinate offset = AssemblerInstance::inserterOffsets[i];
 				Coordinate coord = { assembler.coordinate.x + offset.x, assembler.coordinate.y + offset.y };
 
-				if (coord.x < 0 || coord.x >= problem.binWidth || coord.y < 0 || coord.y >= problem.binHeight)
+				if (coord.x < 0 || coord.x >= problem.blueprintWidth || coord.y < 0 || coord.y >= problem.blueprintHeight)
 				{
 					worldCost += 1.0f;
 					continue;
@@ -649,7 +760,7 @@ private:
 				Coordinate checkOffset = dirOffset(checkDir);
 				Coordinate checkCoord = { coord.x + checkOffset.x, coord.y + checkOffset.y };
 
-				if (checkCoord.x < 0 || checkCoord.x >= problem.binWidth || checkCoord.y < 0 || checkCoord.y >= problem.binHeight)
+				if (checkCoord.x < 0 || checkCoord.x >= problem.blueprintWidth || checkCoord.y < 0 || checkCoord.y >= problem.blueprintHeight)
 				{
 					worldCost += 1.0f;
 					continue;
@@ -918,7 +1029,7 @@ private:
 
 		// Check space requirements for each
 		bestRunConfig = -1;
-		size_t availableSpace = problem.binWidth * problem.binHeight - problem.itemInputs.size() - 1;
+		size_t availableSpace = problem.blueprintWidth * problem.blueprintHeight - problem.itemInputs.size() - 1;
 		for (int i = maxSupportedCeil; i > 0; i--)
 		{
 			const auto& runConfig = possibleRunConfigs[i];
