@@ -49,79 +49,64 @@ while stack.size() > 0:
 */
 
 /* Pseudocode 2
-C++
-float maxSupported = 0.0f;
-for (const auto& input : problem.itemInputs)
-{
-	const ProblemItemInput& inputItem = input.second;
-	const auto& itemInfo = baseItemInfos.at(inputItem.item);
-	float itemsSupportedCount = inputItem.rate / itemInfo.rate;
-	maxSupported = std::max(maxSupported, itemsSupportedCount);
-}
-int maxSupportedCeil = static_cast<int>(std::ceil(maxSupported));
 
-for (int i = maxSupportedCeil; i > 0; i--)
-{
-	RunConfig runConfig;
-	runConfig.outputAssemblerCount = i;
+maxSupported = 0.0
 
-	for (const auto& item : baseItemInfos)
-	{
-		const ItemInfo& itemInfo = item.second;
-		RunConfigItemInfo RunConfigItemInfo{ itemInfo.item };
+for each inputItem in inputItems:
+	maxSupported = max(maxSupported,
+		inputItem.rate / itemInfo[inputItem].rate)
 
-		// If it is a component item calculate assemblers and inserters counts
-		if (itemInfo.isComponent)
-		{
-			const Recipe& itemRecipe = problem.recipes.at(itemInfo.item);
-			RunConfigItemInfo.assemblerCount = static_cast<int>(std::ceil(itemInfo.rate * i / (itemRecipe.quantity * itemRecipe.rate)));
+maxSupportedCeil = ceil(maxSupported)
 
-			int outputCount = static_cast<int>(std::ceil(itemInfo.rate * i / MAX_INSERTER_RATE));
-			RunConfigItemInfo.outputInsertersPerAssembler = outputCount;
+for i = maxSupportedCeil down to 1:
+	runConfig = new RunConfig
+	runConfig.outputAssemblerCount = i
 
-			for (const auto& input : itemRecipe.ingredients)
-			{
-				int inputCount = static_cast<int>(std::ceil(input.quantity * (itemInfo.rate / itemRecipe.quantity) * i / MAX_INSERTER_RATE));
-				RunConfigItemInfo.inputInsertersPerAssembler[input.item] = inputCount;
-			}
-		}
+	for each item in baseItemInfos:
+		runConfigItemInfo = new RunConfigItemInfo(itemInfo.item)
 
-		runConfig.itemInfos[itemInfo.item] = RunConfigItemInfo;
-	}
+		if baseItemInfos[item].isComponent:
+			itemRecipe = problem.recipes[itemInfo.item]
 
-	possibleRunConfigs[i] = runConfig;
-}
+			outputCount = ceil(baseItemInfos[item].rate * i / INSERTER_RATE)
+			runConfigItemInfo.assemblerCount =
+				ceil(baseItemInfos[item].rate * i /
+				(itemRecipe.quantity * itemRecipe.rate))
+			runConfigItemInfo.outputInserters = outputCount
+
+			for each input in itemRecipe.ingredients:
+				inputCount = ceil(input.quantity
+					* (baseItemInfos[item].rate / itemRecipe.quantity)
+					* i / MAX_INSERTER_RATE)
+				runConfigItemInfo.inputInserters[input.item] = inputCount
+				runConfig.itemInfos[itemInfo.item] = runConfigItemInfo
+
+	possibleRunConfigs[i] = RunConfig
+
 */
 
 /* Pseudocode 3
-C++
-bestRunConfig = -1;
-size_t availableSpace = problem.blueprintWidth * problem.blueprintHeight - problem.itemInputs.size() - 1;
-for (int i = maxSupportedCeil; i > 0; i--)
-{
-	const auto& runConfig = possibleRunConfigs[i];
-	size_t requiredSpace = 0;
-	for (const auto& item : runConfig.itemInfos)
-	{
-		requiredSpace += item.second.assemblerCount * 9;
-		requiredSpace += item.second.assemblerCount * item.second.outputInsertersPerAssembler * 2;
-		for (const auto& itemInput : item.second.inputInsertersPerAssembler)
-		{
-			requiredSpace += item.second.assemblerCount * itemInput.second;
-		}
-	}
 
-	#ifdef LOG
-	std::cout << "Run config " << i << " required space: " << requiredSpace << " / " << availableSpace << std::endl;
-	#endif
+bestRunConfig = -1
+availableSpace = problem.blueprintWidth * problem.blueprintHeight - problem.itemInputs.size() - 1
 
-	// Have found the highest run config so break out
-	if (requiredSpace <= availableSpace)
-	{
-		bestRunConfig = i;
-		break;
-	}
-}
+for i = maxSupportedCeil down to 1:
+	runConfig = possibleRunConfigs[i]
+	requiredSpace = 0
+
+	for each item in runConfig.itemInfos:
+		requiredSpace += item.second.assemblerCount * 9
+		requiredSpace += item.second.assemblerCount *
+						 item.second.outputInserters * 2
+
+	for each itemInput in item.second.inputInserters:
+		requiredSpace += item.second.assemblerCount
+						 * itemInput.second
+
+	if requiredSpace <= availableSpace:
+		bestRunConfig = i
+		break
+
 */
 
 // ------------------------------------------------
