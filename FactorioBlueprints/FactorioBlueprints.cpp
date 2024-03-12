@@ -109,6 +109,57 @@ for i = maxSupportedCeil down to 1:
 
 */
 
+/* Pseudocode 4 (Unused)
+
+pathEnds = createVector()
+blockedGrid = create2DVector(problem.blueprintWidth, problem.blueprintHeight, false)
+itemGrid = create2DVector(problem.blueprintWidth, problem.blueprintHeight, -1)
+
+// Add input and output items to the world
+for each input in problem.itemInputs:
+	itemGrid[input.second.coordinate.x][input.second.coordinate.y] = input.first
+	pathEnds.pushBack({input.first, true, input.second.coordinate})
+
+itemGrid[problem.itemOutput.coordinate.x][problem.itemOutput.coordinate.y] = problem.itemOutput.item
+pathEnds.pushBack({problem.itemOutput.item, false, problem.itemOutput.coordinate})
+
+for each assembler in assemblers:
+	for x = 0 to 2:
+		for y = 0 to 2:
+			coord = {assembler.coordinate.x + x, assembler.coordinate.y + y}
+			if blockedGrid[coord.x][coord.y]: worldCost += 1.0
+			if itemGrid[coord.x][coord.y] != -1: worldCost += 1.0
+			blockedGrid[coord.x][coord.y] = true
+
+	// Check each of 12 inserter positions for blocked
+	for i = 0 to 11:
+		inserter = assembler.inserters[i]
+		if inserter.item == -1: continue
+		offset = AssemblerInstance::inserterOffsets[i]
+		coord = {assembler.coordinate.x + offset.x, assembler.coordinate.y + offset.y}
+		if coord.x < 0 or coord.x >= problem.blueprintWidth or coord.y < 0 or coord.y >= problem.blueprintHeight:
+			worldCost += 1.0
+			continue
+		if blockedGrid[coord.x][coord.y]: worldCost += 1.0
+		if itemGrid[coord.x][coord.y] != -1: worldCost += 1.0
+		blockedGrid[coord.x][coord.y] = true
+
+		// Check inserter open side for items or blocked
+		checkDir = AssemblerInstance::inserterDirections[i]
+		checkOffset = dirOffset(checkDir)
+		checkCoord = {coord.x + checkOffset.x, coord.y + checkOffset.y}
+		if checkCoord.x < 0 or checkCoord.x >= problem.blueprintWidth or checkCoord.y < 0 or checkCoord.y >= problem.blueprintHeight:
+			worldCost += 1.0
+			continue
+		if blockedGrid[checkCoord.x][checkCoord.y]: worldCost += 1.0
+		if itemGrid[checkCoord.x][checkCoord.y] != -1 and itemGrid[checkCoord.x][checkCoord.y] != inserter.item: worldCost += 1.0
+		itemGrid[checkCoord.x][checkCoord.y] = inserter.item
+		pathEnds.pushBack({inserter.item, not inserter.isInput, checkCoord})
+
+isWorldValid = worldCost == 0.0
+
+*/
+
 // ------------------------------------------------
 
 enum class Direction { N, S, W, E };
@@ -277,6 +328,13 @@ struct AssemblerInstance
 	int item = -1;
 	Coordinate coordinate;
 	InserterInstance inserters[12];
+};
+
+class LSState
+{
+	// ...
+	std::vector<AssemblerInstance> assemblers;
+	// ...
 };
 
 const std::vector<Direction> AssemblerInstance::inserterDirections = {
@@ -470,6 +528,7 @@ public:
 		{
 			std::cout << "Path end: " << pathEnd.item << " at (" << pathEnd.coordinate.x << ", " << pathEnd.coordinate.y << ") " << (pathEnd.isSource ? "source" : "destination") << std::endl;
 		}
+		std::cout << std::endl;
 
 		fitness = 0.0f;
 	}
@@ -1025,7 +1084,7 @@ private:
 				requiredSpace += item.second.assemblerCount * item.second.outputInsertersPerAssembler * 2;
 				for (const auto& itemInput : item.second.inputInsertersPerAssembler)
 				{
-					requiredSpace += item.second.assemblerCount * itemInput.second;
+					requiredSpace += item.second.assemblerCount * itemInput.second * 2;
 				}
 			}
 
@@ -1141,7 +1200,7 @@ void checkCBPathfinding()
 	state->print();
 
 	// Request cost to trigger pathfinding
-	std::cout << "\nState fitness: " << state->getFitness() << std::endl;
+	std::cout << "State fitness: " << state->getFitness() << std::endl;
 }
 
 int main()
