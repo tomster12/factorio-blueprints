@@ -305,7 +305,7 @@ struct ItemPathEnd
 class PFState : public pf::State<PFState>
 {
 public:
-	enum class BeltType { None, Conveyor, UndergroundEntrance, Underground, UndergroundExit };
+	enum class BeltType { None, Inserter, Conveyor, UndergroundEntrance, Underground, UndergroundExit };
 
 	bool operator==(PFState& other) const
 	{
@@ -321,6 +321,7 @@ public:
 		{
 			float coordDist = pf::EuclideanDistance((float)coordinate.x, (float)coordinate.y, (float)parent->coordinate.x, (float)parent->coordinate.y);
 			if ((type == BeltType::Underground) || (parent->type == BeltType::Underground)) coordDist *= 0.5f;
+			if (parent->type == BeltType::Inserter) coordDist = 0.0f;
 			gCost = parent->gCost + coordDist;
 		}
 
@@ -334,7 +335,7 @@ public:
 	{
 		// Loose requirements for goal when using None
 		bool coordMatch = coordinate.x == goal->coordinate.x && coordinate.y == goal->coordinate.y;
-		bool aboveGroundMatch = type != BeltType::Underground; // true; // (type == BeltType::Underground) == (goal->type == BeltType::Underground);
+		bool aboveGroundMatch = type != BeltType::Underground && type != BeltType::Inserter; // true; // (type == BeltType::Underground) == (goal->type == BeltType::Underground);
 		return coordMatch && aboveGroundMatch;
 	}
 
@@ -422,6 +423,26 @@ public:
 			{
 				neighbours.push_back(std::make_shared<PFState>(blockedGrid, newCoord, BeltType::Conveyor, direction, std::make_shared<PFState>(*this)));
 				neighbours.push_back(std::make_shared<PFState>(blockedGrid, newCoord, BeltType::UndergroundEntrance, direction, std::make_shared<PFState>(*this)));
+			}
+		}
+
+		else if (type == BeltType::Inserter)
+		{
+			// (Forwards) Inserter -> Conveyor | UndergroundEntrance
+			Coordinate offset = dirOffset(direction);
+			Coordinate newCoord = { coordinate.x + offset.x, coordinate.y + offset.y };
+
+			if (newCoord.x >= 0 && newCoord.x < blockedGrid.size() && newCoord.y >= 0 && newCoord.y < blockedGrid[0].size() && !blockedGrid[newCoord.x][newCoord.y])
+			{
+				for (int i = 0; i < 4; i++)
+				{
+					Direction newDir = Direction(i);
+					if (direction != dirOpposite(newDir))
+					{
+						neighbours.push_back(std::make_shared<PFState>(blockedGrid, newCoord, BeltType::Conveyor, newDir, std::make_shared<PFState>(*this)));
+						neighbours.push_back(std::make_shared<PFState>(blockedGrid, newCoord, BeltType::UndergroundEntrance, newDir, std::make_shared<PFState>(*this)));
+					}
+				}
 			}
 		}
 
