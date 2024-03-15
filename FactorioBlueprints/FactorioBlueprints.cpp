@@ -63,7 +63,7 @@ for i = maxSupportedCeil down to 1:
 	runConfig.outputAssemblerCount = i
 
 	for each item in baseItemInfos:
-		runConfigItemInfo = new RunConfigItemInfo(itemInfo.item)
+		runConfigItemInfo = new runConfigItemInfo(itemInfo.item)
 
 		if baseItemInfos[item].isComponent:
 			itemRecipe = problem.recipes[itemInfo.item]
@@ -298,10 +298,13 @@ struct ItemInfo
 // and how many inserters are required for output / each input
 struct RunConfigItemInfo
 {
+	struct InserterRequirement { int count; float rate; };
+
 	int item = -1;
 	int assemblerCount = 0;
 	int outputInsertersPerAssembler = 0;
-	std::map<int, int> inputInsertersPerAssembler;
+	float outputInsertersRate = 0.0f;
+	std::map<int, InserterRequirement> inputInsertersPerAssembler;
 };
 
 // A given run of the solver with a set amount of
@@ -316,6 +319,7 @@ struct RunConfig
 struct InserterInstance
 {
 	int item = -1;
+	float rate = 0.0f;
 	bool isInput = false;
 };
 
@@ -328,13 +332,6 @@ struct AssemblerInstance
 	int item = -1;
 	Coordinate coordinate;
 	InserterInstance inserters[12];
-};
-
-class LSState
-{
-	// ...
-	std::vector<AssemblerInstance> assemblers;
-	// ...
 };
 
 const std::vector<Direction> AssemblerInstance::inserterDirections = {
@@ -354,8 +351,22 @@ const std::vector<Coordinate> AssemblerInstance::inserterOffsets = {
 struct ItemPathEnd
 {
 	int item;
+	float rate;
 	bool isSource;
 	Coordinate coordinate;
+};
+
+struct ItemPathEnds
+{
+	std::vector<ItemPathEnd> sources;
+	std::vector<ItemPathEnd> destinations;
+};
+
+struct ConcretePathEnd
+{
+	enum class Type { END, PATH };
+	Type type;
+	int index;
 };
 
 // A state represents a position on the map with a belt type and direction
@@ -393,7 +404,7 @@ public:
 	{
 		// Loose requirements for goal when using None
 		bool coordMatch = coordinate.x == goal->coordinate.x && coordinate.y == goal->coordinate.y;
-		bool aboveGroundMatch = type != BeltType::Underground && type != BeltType::Inserter; // true; // (type == BeltType::Underground) == (goal->type == BeltType::Underground);
+		bool aboveGroundMatch = type != BeltType::Underground && type != BeltType::Inserter;
 		return coordMatch && aboveGroundMatch;
 	}
 
@@ -547,7 +558,10 @@ public:
 		// Print out path ends
 		for (const auto& pathEnd : pathEnds)
 		{
-			std::cout << "Path end: " << pathEnd.item << " at (" << pathEnd.coordinate.x << ", " << pathEnd.coordinate.y << ") " << (pathEnd.isSource ? "source" : "destination") << std::endl;
+			std::cout << "Path end: " << pathEnd.item
+				<< " at (" << pathEnd.coordinate.x << ", " << pathEnd.coordinate.y << ") "
+				<< (pathEnd.isSource ? "source" : "destination")
+				<< " @ " << pathEnd.rate << "/s" << std::endl;
 		}
 		std::cout << std::endl;
 
@@ -559,6 +573,8 @@ public:
 private:
 	const std::vector<std::vector<bool>>& blockedGrid;
 	const std::vector<ItemPathEnd>& pathEnds;
+
+	std::map<int, ItemPathEnds> itemPathEnds;
 	float fitness = 0.0f;
 };
 
@@ -662,12 +678,12 @@ public:
 				// Randomly place input inserters
 				for (const auto& input : itemInfo.inputInsertersPerAssembler)
 				{
-					for (int i = 0; i < input.second; i++)
+					for (int i = 0; i < input.second.count; i++)
 					{
 						int index = rand() % availableInserters.size();
 						int inserterIndex = availableInserters[index];
 						availableInserters.erase(availableInserters.begin() + index);
-						assembler.inserters[inserterIndex] = InserterInstance{ input.first, true };
+						assembler.inserters[inserterIndex] = InserterInstance{ input.first, input.second.rate, true };
 					}
 				}
 
@@ -677,7 +693,7 @@ public:
 					int index = rand() % availableInserters.size();
 					int inserterIndex = availableInserters[index];
 					availableInserters.erase(availableInserters.begin() + index);
-					assembler.inserters[inserterIndex] = InserterInstance{ item.first, false };
+					assembler.inserters[inserterIndex] = InserterInstance{ item.first, itemInfo.outputInsertersRate, false };
 				}
 
 				assemblers.push_back(assembler);
@@ -734,13 +750,19 @@ public:
 
 		for (const auto& assembler : assemblers)
 		{
-			std::cout << "Assembler: " << assembler.item << " at (" << assembler.coordinate.x << ", " << assembler.coordinate.y << ")" << std::endl;
+			std::cout << "Assembler: item " << assembler.item
+				<< " at (" << assembler.coordinate.x << ", " << assembler.coordinate.y << ")" << std::endl;
+
 			for (int i = 0; i < 12; i++)
 			{
 				const InserterInstance& inserter = assembler.inserters[i];
 				if (inserter.item != -1)
 				{
-					std::cout << "  Inserter: " << i << " item " << inserter.item << " at (" << assembler.coordinate.x + AssemblerInstance::inserterOffsets[i].x << ", " << assembler.coordinate.y + AssemblerInstance::inserterOffsets[i].y << ")" << std::endl;
+					std::cout << "  Inserter: index " << i
+						<< " item " << inserter.item
+						<< (inserter.isInput ? " input" : " output")
+						<< " at (" << assembler.coordinate.x + AssemblerInstance::inserterOffsets[i].x << ", " << assembler.coordinate.y + AssemblerInstance::inserterOffsets[i].y << ")"
+						<< " @ " << inserter.rate << "/s" << std::endl;
 				}
 			}
 		}
@@ -779,10 +801,10 @@ private:
 		for (const auto& input : problem.itemInputs)
 		{
 			itemGrid[input.second.coordinate.x][input.second.coordinate.y] = input.first;
-			pathEnds.push_back({ input.first, true, input.second.coordinate });
+			pathEnds.push_back({ input.first, input.second.rate, true, input.second.coordinate });
 		}
 		itemGrid[problem.itemOutput.coordinate.x][problem.itemOutput.coordinate.y] = problem.itemOutput.item;
-		pathEnds.push_back({ problem.itemOutput.item, false, problem.itemOutput.coordinate });
+		pathEnds.push_back({ problem.itemOutput.item, -1.0f, false, problem.itemOutput.coordinate });
 
 		for (const auto& assembler : assemblers)
 		{
@@ -835,7 +857,7 @@ private:
 				if (itemGrid[checkCoord.x][checkCoord.y] != -1 && itemGrid[checkCoord.x][checkCoord.y] != inserter.item) worldCost += 1.0f;
 
 				itemGrid[checkCoord.x][checkCoord.y] = inserter.item;
-				pathEnds.push_back({ inserter.item, !inserter.isInput, checkCoord });
+				pathEnds.push_back({ inserter.item, inserter.rate, !inserter.isInput, checkCoord });
 			}
 		}
 
@@ -1042,25 +1064,33 @@ private:
 			for (const auto& item : baseItemInfos)
 			{
 				const ItemInfo& itemInfo = item.second;
-				RunConfigItemInfo RunConfigItemInfo{ itemInfo.item };
+				RunConfigItemInfo runConfigItemInfo{ itemInfo.item };
 
 				// If it is a component item calculate assemblers and inserters counts
 				if (itemInfo.isComponent)
 				{
 					const Recipe& itemRecipe = problem.recipes.at(itemInfo.item);
-					RunConfigItemInfo.assemblerCount = static_cast<int>(std::ceil(itemInfo.rate * i / (itemRecipe.quantity * itemRecipe.rate)));
 
-					int outputCount = static_cast<int>(std::ceil(itemInfo.rate * i / MAX_INSERTER_RATE));
-					RunConfigItemInfo.outputInsertersPerAssembler = outputCount;
+					float totalRate = itemInfo.rate * i;
+					float singleRate = itemRecipe.rate * itemRecipe.quantity;
+					int assemblerCount = static_cast<int>(std::ceil(totalRate / singleRate));
+					float realSingleRate = totalRate / assemblerCount;
+					int outputCount = static_cast<int>(std::ceil(realSingleRate / MAX_INSERTER_RATE));
+
+					runConfigItemInfo.assemblerCount = assemblerCount;
+					runConfigItemInfo.outputInsertersPerAssembler = outputCount;
+					runConfigItemInfo.outputInsertersRate = realSingleRate / outputCount;
 
 					for (const auto& input : itemRecipe.ingredients)
 					{
-						int inputCount = static_cast<int>(std::ceil(input.quantity * (itemInfo.rate / itemRecipe.quantity) * i / MAX_INSERTER_RATE));
-						RunConfigItemInfo.inputInsertersPerAssembler[input.item] = inputCount;
+						float totalInputRate = realSingleRate * (input.quantity / itemRecipe.quantity);
+						int inputCount = static_cast<int>(std::ceil(totalInputRate / MAX_INSERTER_RATE));
+						float inputRate = totalInputRate / inputCount;
+						runConfigItemInfo.inputInsertersPerAssembler[input.item] = { inputCount, inputRate };
 					}
 				}
 
-				runConfig.itemInfos[itemInfo.item] = RunConfigItemInfo;
+				runConfig.itemInfos[itemInfo.item] = runConfigItemInfo;
 			}
 
 			possibleRunConfigs[i] = runConfig;
@@ -1081,10 +1111,10 @@ private:
 				{
 					std::cout << "\tComponent item: " << item.first << std::endl;
 					std::cout << "\t  Assemblers: " << item.second.assemblerCount << std::endl;
-					std::cout << "\t  Output inserters / assembler: " << item.second.outputInsertersPerAssembler << std::endl;
+					std::cout << "\t  Output inserters / assembler: " << item.second.outputInsertersPerAssembler << " @ " << item.second.outputInsertersRate << "/s" << std::endl;
 					for (const auto& itemInput : item.second.inputInsertersPerAssembler)
 					{
-						std::cout << "\t  Input inserters / assembler for " << itemInput.first << ": " << itemInput.second << std::endl;
+						std::cout << "\t  Input inserters / assembler for " << itemInput.first << ": " << itemInput.second.count << " @ " << itemInput.second.rate << "/s" << std::endl;
 					}
 				}
 			}
@@ -1105,7 +1135,7 @@ private:
 				requiredSpace += item.second.assemblerCount * item.second.outputInsertersPerAssembler * 2;
 				for (const auto& itemInput : item.second.inputInsertersPerAssembler)
 				{
-					requiredSpace += item.second.assemblerCount * itemInput.second * 2;
+					requiredSpace += item.second.assemblerCount * itemInput.second.count * 2;
 				}
 			}
 
@@ -1208,14 +1238,15 @@ void checkCBPathfinding()
 	// Setup example local search state
 	RunConfig runConfig;
 	runConfig.outputAssemblerCount = 1;
-	runConfig.itemInfos[1] = { 1, 2, 1, { { 0, 1 } } };
-	runConfig.itemInfos[2] = { 2, 1, 1, { { 0, 1 }, { 1, 1 } } };
+	runConfig.itemInfos[0] = { 0, 0, 0, 0.0f };
+	runConfig.itemInfos[1] = { 1, 2, 1, 0.5f, { { 0, { 1, 0.5f } } } };
+	runConfig.itemInfos[2] = { 2, 1, 1, 0.5f, { { 0, { 1, 1.0f } }, { 1, { 1, 1.0f }}} };
 
 	InserterInstance none{ -1, false };
 	std::vector<AssemblerInstance> assemblers;
-	assemblers.push_back({ 1, { 5, 0 }, { none, none, none, none, none, { 1, false }, { 0, true }, none, none, none, none, none } });
-	assemblers.push_back({ 1, { 3, 7 }, { none, none, none, { 0, true }, none, none, none, none, none, none, none, { 1, false } } });
-	assemblers.push_back({ 2, { 2, 4 }, { none, none, { 0, true }, { 2, false }, none, none, none, none, none, none, { 1, true }, none } });
+	assemblers.push_back({ 1, { 5, 0 }, { none, none, none, none, none, { 1, 0.5f, false }, { 0, 0.5f, true }, none, none, none, none, none } });
+	assemblers.push_back({ 1, { 3, 7 }, { none, none, none, { 0, 0.5f, true }, none, none, none, none, none, none, none, { 1, 0.5f, false } } });
+	assemblers.push_back({ 2, { 2, 4 }, { none, none, { 0, 1.0f, true }, { 2, 0.5f, false }, none, none, none, none, none, none, { 1, 1.0f, true }, none } });
 
 	std::shared_ptr<LSState> state = std::make_shared<LSState>(problem, runConfig, assemblers);
 	state->print();
