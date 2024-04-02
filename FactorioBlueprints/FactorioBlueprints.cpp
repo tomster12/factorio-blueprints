@@ -9,6 +9,7 @@
 #include <set>
 #include <stack>
 #include <string>
+#include <cassert>
 
 #include "LocalSearch.h"
 #include "Pathfinding.h"
@@ -152,19 +153,111 @@ private:
 
 // ------------------------------------------------
 
+struct PFConstraint
+{
+	Coordinate coordinate;
+	size_t conflictGroup;
+};
+
 class PFState : public pf::State<PFState>
 {
 public:
 	enum class BeltType { None, Inserter, Conveyor, UndergroundEntrance, Underground, UndergroundExit };
+
+public:
+	PFState(
+		const std::vector<std::vector<bool>>& blockedGrid, const std::vector<PFConstraint>& constraints, std::shared_ptr<PFState> goal,
+		Coordinate coordinate, BeltType type, Direction direction,
+		std::shared_ptr<PFState> parent = nullptr)
+		: blockedGrid(blockedGrid), constraints(constraints), goal(goal),
+		coordinate(coordinate), type(type), direction(direction),
+		pf::State<PFState>(parent)
+	{
+		if (type == BeltType::Underground)
+		{
+			if (direction == Direction::N || direction == Direction::S) conflictGroup = 1;
+			else conflictGroup = 2;
+		}
+		else conflictGroup = 0;
+	}
 
 	bool operator==(PFState& other) const
 	{
 		return coordinate.x == other.coordinate.x && coordinate.y == other.coordinate.y && type == other.type && direction == other.direction;
 	}
 
-	float getCost(std::shared_ptr<PFState> goal) override
+	bool compareConstraint(const PFConstraint& other) const
 	{
-		if (costCalculated) return gCost + hCost;
+		return coordinate.x == other.coordinate.x && coordinate.y == other.coordinate.y && conflictGroup == other.conflictGroup;
+	}
+
+	PFConstraint getConstraint() const
+	{
+		return { coordinate, conflictGroup };
+	}
+
+	float getFCost() override
+	{
+		calculateCosts();
+		return gCost + hCost;
+	}
+
+	float getGCost() override
+	{
+		calculateCosts();
+		return gCost;
+	}
+
+	float getHCost() override
+	{
+		calculateCosts();
+		return hCost;
+	}
+
+	std::vector<std::shared_ptr<PFState>> getNeighbours() override
+	{
+		calculateNeighbours();
+		return neighbours;
+	}
+
+	std::shared_ptr<PFState> getGoal() const
+	{
+		return goal;
+	}
+
+	bool isGoal() override
+	{
+		// Loose requirements for goal when using None
+		bool coordMatch = coordinate.x == goal->coordinate.x && coordinate.y == goal->coordinate.y;
+		bool aboveGroundMatch = type != BeltType::Underground && type != BeltType::Inserter;
+		return coordMatch && aboveGroundMatch;
+	}
+
+	void print()
+	{
+		std::string typeStr = type == BeltType::None ? "None" : type == BeltType::Conveyor ? "Conveyor" : type == BeltType::UndergroundEntrance ? "UndergroundEntrance" : type == BeltType::Underground ? "Underground" : "UndergroundExit";
+		std::cout << "State: (" << coordinate.x << ", " << coordinate.y << "), belt type: " << typeStr << ", direction: " << dirString(direction) << std::endl;
+	}
+
+private:
+	const std::vector<std::vector<bool>>& blockedGrid;
+	const std::vector<PFConstraint>& constraints;
+	std::shared_ptr<PFState> goal;
+
+	Coordinate coordinate;
+	BeltType type;
+	Direction direction;
+	size_t conflictGroup;
+
+	bool neighboursCalculated = false;
+	bool costCalculated = false;
+	std::vector<std::shared_ptr<PFState>> neighbours;
+	float gCost = 0.0f;
+	float hCost = 0.0f;
+
+	void calculateCosts()
+	{
+		if (costCalculated) return;
 
 		if (parent == nullptr) gCost = 0.0f;
 		else
@@ -178,20 +271,11 @@ public:
 		hCost = pf::EuclideanDistance((float)coordinate.x, (float)coordinate.y, (float)goal->coordinate.x, (float)goal->coordinate.y);
 
 		costCalculated = true;
-		return gCost + hCost;
 	}
 
-	bool isGoal(std::shared_ptr<PFState> goal) override
+	void calculateNeighbours()
 	{
-		// Loose requirements for goal when using None
-		bool coordMatch = coordinate.x == goal->coordinate.x && coordinate.y == goal->coordinate.y;
-		bool aboveGroundMatch = type != BeltType::Underground && type != BeltType::Inserter;
-		return coordMatch && aboveGroundMatch;
-	}
-
-	std::vector<std::shared_ptr<PFState>> getNeighbours() override
-	{
-		if (neighboursCalculated) return neighbours;
+		if (neighboursCalculated) return;
 
 		neighbours = std::vector<std::shared_ptr<PFState>>();
 
@@ -203,8 +287,8 @@ public:
 				if (!blockedGrid[coordinate.x][coordinate.y])
 				{
 					Direction newDirection = static_cast<Direction>(i);
-					neighbours.push_back(std::make_shared<PFState>(blockedGrid, coordinate, BeltType::Conveyor, newDirection, std::make_shared<PFState>(*this)));
-					neighbours.push_back(std::make_shared<PFState>(blockedGrid, coordinate, BeltType::UndergroundEntrance, newDirection, std::make_shared<PFState>(*this)));
+					neighbours.push_back(std::make_shared<PFState>(blockedGrid, constraints, goal, coordinate, BeltType::Conveyor, newDirection, std::make_shared<PFState>(*this)));
+					neighbours.push_back(std::make_shared<PFState>(blockedGrid, constraints, goal, coordinate, BeltType::UndergroundEntrance, newDirection, std::make_shared<PFState>(*this)));
 				}
 			}
 		}
@@ -222,8 +306,8 @@ public:
 				if (newCoord.x < 0 || newCoord.x >= blockedGrid.size() || newCoord.y < 0 || newCoord.y >= blockedGrid[0].size()) continue;
 				if (blockedGrid[newCoord.x][newCoord.y]) continue;
 
-				neighbours.push_back(std::make_shared<PFState>(blockedGrid, newCoord, BeltType::Conveyor, newDirection, std::make_shared<PFState>(*this)));
-				neighbours.push_back(std::make_shared<PFState>(blockedGrid, newCoord, BeltType::UndergroundEntrance, newDirection, std::make_shared<PFState>(*this)));
+				neighbours.push_back(std::make_shared<PFState>(blockedGrid, constraints, goal, newCoord, BeltType::Conveyor, newDirection, std::make_shared<PFState>(*this)));
+				neighbours.push_back(std::make_shared<PFState>(blockedGrid, constraints, goal, newCoord, BeltType::UndergroundEntrance, newDirection, std::make_shared<PFState>(*this)));
 			}
 		}
 
@@ -235,12 +319,12 @@ public:
 
 			if (newCoord.x >= 0 && newCoord.x < blockedGrid.size() && newCoord.y >= 0 && newCoord.y < blockedGrid[0].size())
 			{
-				neighbours.push_back(std::make_shared<PFState>(blockedGrid, newCoord, BeltType::Underground, direction, std::make_shared<PFState>(*this)));
+				neighbours.push_back(std::make_shared<PFState>(blockedGrid, constraints, goal, newCoord, BeltType::Underground, direction, std::make_shared<PFState>(*this)));
 
 				// (Forwards, not blocked) : UndergroundEntrance -> UndergroundExit
 				if (!blockedGrid[newCoord.x][newCoord.y])
 				{
-					neighbours.push_back(std::make_shared<PFState>(blockedGrid, newCoord, BeltType::UndergroundExit, direction, std::make_shared<PFState>(*this)));
+					neighbours.push_back(std::make_shared<PFState>(blockedGrid, constraints, goal, newCoord, BeltType::UndergroundExit, direction, std::make_shared<PFState>(*this)));
 				}
 			}
 		}
@@ -253,12 +337,12 @@ public:
 
 			if (newCoord.x >= 0 && newCoord.x < blockedGrid.size() && newCoord.y >= 0 && newCoord.y < blockedGrid[0].size())
 			{
-				neighbours.push_back(std::make_shared<PFState>(blockedGrid, newCoord, BeltType::Underground, direction, std::make_shared<PFState>(*this)));
+				neighbours.push_back(std::make_shared<PFState>(blockedGrid, constraints, goal, newCoord, BeltType::Underground, direction, std::make_shared<PFState>(*this)));
 
 				// (Forwards, not blocked) : Underground -> UndergroundExit
 				if (!blockedGrid[newCoord.x][newCoord.y])
 				{
-					neighbours.push_back(std::make_shared<PFState>(blockedGrid, newCoord, BeltType::UndergroundExit, direction, std::make_shared<PFState>(*this)));
+					neighbours.push_back(std::make_shared<PFState>(blockedGrid, constraints, goal, newCoord, BeltType::UndergroundExit, direction, std::make_shared<PFState>(*this)));
 				}
 			}
 		}
@@ -271,8 +355,8 @@ public:
 
 			if (newCoord.x >= 0 && newCoord.x < blockedGrid.size() && newCoord.y >= 0 && newCoord.y < blockedGrid[0].size() && !blockedGrid[newCoord.x][newCoord.y])
 			{
-				neighbours.push_back(std::make_shared<PFState>(blockedGrid, newCoord, BeltType::Conveyor, direction, std::make_shared<PFState>(*this)));
-				neighbours.push_back(std::make_shared<PFState>(blockedGrid, newCoord, BeltType::UndergroundEntrance, direction, std::make_shared<PFState>(*this)));
+				neighbours.push_back(std::make_shared<PFState>(blockedGrid, constraints, goal, newCoord, BeltType::Conveyor, direction, std::make_shared<PFState>(*this)));
+				neighbours.push_back(std::make_shared<PFState>(blockedGrid, constraints, goal, newCoord, BeltType::UndergroundEntrance, direction, std::make_shared<PFState>(*this)));
 			}
 		}
 
@@ -289,41 +373,25 @@ public:
 					Direction newDir = Direction(i);
 					if (direction != dirOpposite(newDir))
 					{
-						neighbours.push_back(std::make_shared<PFState>(blockedGrid, newCoord, BeltType::Conveyor, newDir, std::make_shared<PFState>(*this)));
-						neighbours.push_back(std::make_shared<PFState>(blockedGrid, newCoord, BeltType::UndergroundEntrance, newDir, std::make_shared<PFState>(*this)));
+						neighbours.push_back(std::make_shared<PFState>(blockedGrid, constraints, goal, newCoord, BeltType::Conveyor, newDir, std::make_shared<PFState>(*this)));
+						neighbours.push_back(std::make_shared<PFState>(blockedGrid, constraints, goal, newCoord, BeltType::UndergroundEntrance, newDir, std::make_shared<PFState>(*this)));
 					}
 				}
 			}
 		}
 
+		// Filter neighbours in place based on constraints
+		neighbours.erase(std::remove_if(neighbours.begin(), neighbours.end(), [&](std::shared_ptr<PFState> state)
+		{
+			for (const PFConstraint& constraint : constraints)
+			{
+				if (state->compareConstraint(constraint)) return true;
+			}
+			return false;
+		}), neighbours.end());
+
 		neighboursCalculated = true;
-		return neighbours;
 	}
-
-public:
-	PFState(const std::vector<std::vector<bool>>& blockedGrid, Coordinate coordinate, BeltType type, Direction direction, std::shared_ptr<PFState> parent = nullptr)
-		: blockedGrid(blockedGrid), coordinate(coordinate), type(type), direction(direction), pf::State<PFState>(parent)
-	{}
-
-	void print()
-	{
-		std::string typeStr = type == BeltType::None ? "None" : type == BeltType::Conveyor ? "Conveyor" : type == BeltType::UndergroundEntrance ? "UndergroundEntrance" : type == BeltType::Underground ? "Underground" : "UndergroundExit";
-		std::cout << "State: (" << coordinate.x << ", " << coordinate.y << "), belt type: " << typeStr << ", direction: " << dirString(direction) << std::endl;
-	}
-
-private:
-	const std::vector<std::vector<bool>>& blockedGrid;
-
-	Coordinate coordinate;
-	BeltType type;
-	Direction direction;
-
-	bool neighboursCalculated = false;
-	bool costCalculated = false;
-
-	std::vector<std::shared_ptr<PFState>> neighbours;
-	float gCost = 0.0f;
-	float hCost = 0.0f;
 };
 
 struct RunConfig
@@ -350,7 +418,7 @@ struct ItemEndpoint
 	Coordinate coordinate;
 };
 
-struct PathEndpoint
+struct ConcreteEndpoint
 {
 	enum class Type { ITEM, PATH };
 	Type type;
@@ -359,8 +427,8 @@ struct PathEndpoint
 
 struct PathConfig
 {
-	PathEndpoint source;
-	PathEndpoint destination;
+	ConcreteEndpoint source;
+	ConcreteEndpoint destination;
 	size_t pathGroup;
 	std::vector<size_t> dependantPaths = std::vector<size_t>();
 };
@@ -368,6 +436,23 @@ struct PathConfig
 class CBPathfinder
 {
 public:
+	struct CTNode
+	{
+		std::map<size_t, std::vector<PFConstraint>> pathConstraints{};
+		std::vector<size_t> pathsToCalculate{};
+		std::map<size_t, pf::Path<PFState>> calculatedPaths{};
+		std::map<size_t, pf::Path<PFState>*> allPaths{};
+		bool isValid = true;
+		float cost = 0.0f;
+	};
+
+	struct CTConflict
+	{
+		size_t pathA;
+		size_t pathB;
+		PFConstraint constraint;
+	};
+
 	CBPathfinder(const std::vector<std::vector<bool>>& blockedGrid, const std::vector<ItemEndpoint>& itemEndpoints)
 		: blockedGrid(blockedGrid), itemEndpoints(itemEndpoints)
 	{}
@@ -381,31 +466,6 @@ public:
 	}
 
 private:
-	/*
-	struct CTConstraint
-	{
-		size_t pathIndex;
-		Coordinate position;
-		bool underground;
-	};
-
-	struct CTConflict
-	{
-		Coordinate position;
-		bool underground;
-	};
-
-	struct CAT
-	{};
-
-	struct CTNode
-	{
-		CAT conflictTable;
-		size_t conflictCount;
-		float cost;
-	};
-	*/
-
 	const std::vector<std::vector<bool>>& blockedGrid;
 	const std::vector<ItemEndpoint>& itemEndpoints;
 
@@ -459,7 +519,7 @@ private:
 			auto& endpoints = item.second;
 
 			// Keep track of paths for this item
-			std::set<size_t> paths = std::set<size_t>();
+			std::set<size_t> pathConfigs = std::set<size_t>();
 
 			// While there are endpoints to process, grab the highest rate
 			while (endpoints.size() > 0)
@@ -470,7 +530,7 @@ private:
 
 				// Find the most suitable endpoint, minimising |spareRate|, and prioritising > 0
 				float bestSpareRate = std::numeric_limits<float>::max();
-				PathEndpoint bestEndpoint;
+				ConcreteEndpoint bestEndpoint{};
 				bool bestIsPriority = false;
 
 				// Check all compatible item endpoints
@@ -489,13 +549,13 @@ private:
 					if ((!bestIsPriority && isPriority) || ((bestIsPriority == isPriority) && (abs(spareRate) < abs(bestSpareRate))))
 					{
 						bestSpareRate = spareRate;
-						bestEndpoint = { PathEndpoint::Type::ITEM, otherIndex };
+						bestEndpoint = { ConcreteEndpoint::Type::ITEM, otherIndex };
 						bestIsPriority = isPriority;
 					}
 				}
 
 				// Check all paths for this item
-				for (size_t pathIndex : paths)
+				for (size_t pathIndex : pathConfigs)
 				{
 					const PathConfig& path = this->pathConfigs[pathIndex];
 
@@ -509,29 +569,29 @@ private:
 					if ((!bestIsPriority && isPriority) || (bestIsPriority == isPriority && (abs(newSpareRate) < abs(bestSpareRate))))
 					{
 						bestSpareRate = newSpareRate;
-						bestEndpoint = { PathEndpoint::Type::PATH, pathIndex };
+						bestEndpoint = { ConcreteEndpoint::Type::PATH, pathIndex };
 						bestIsPriority = isPriority;
 					}
 				}
 
 				// Create the concrete endpoint for the current item endpoint
-				PathEndpoint currentEndpoint = { PathEndpoint::Type::ITEM, currentIndex };
+				ConcreteEndpoint currentEndpoint = { ConcreteEndpoint::Type::ITEM, currentIndex };
 
 				// Add a path with the current and best endpoint
 				size_t pathIndex = this->pathConfigs.size();
-				size_t pathGroup = (bestEndpoint.type == PathEndpoint::Type::PATH) ? this->pathConfigs[bestEndpoint.index].pathGroup : this->currentPathGroup++;
+				size_t pathGroup = (bestEndpoint.type == ConcreteEndpoint::Type::PATH) ? this->pathConfigs[bestEndpoint.index].pathGroup : this->currentPathGroup++;
 				if (current.isSource) this->pathConfigs.push_back({ currentEndpoint, bestEndpoint, pathGroup });
 				else this->pathConfigs.push_back({ bestEndpoint, currentEndpoint, pathGroup });
-				paths.insert(pathIndex);
+				pathConfigs.insert(pathIndex);
 
 				// Add the path to the dependant paths of the best endpoint
-				if (bestEndpoint.type == PathEndpoint::Type::PATH)
+				if (bestEndpoint.type == ConcreteEndpoint::Type::PATH)
 				{
 					this->pathConfigs[bestEndpoint.index].dependantPaths.push_back(pathIndex);
 				}
 
 				// Remove the best endpoint from the list of endpoints
-				else if (bestEndpoint.type == PathEndpoint::Type::ITEM)
+				else if (bestEndpoint.type == ConcreteEndpoint::Type::ITEM)
 				{
 					endpoints.erase(std::remove(endpoints.begin(), endpoints.end(), bestEndpoint.index), endpoints.end());
 				}
@@ -541,7 +601,7 @@ private:
 				std::cout << "Current: index " << currentIndex << ", item " << current.item << " at (" << current.coordinate.x << ", " << current.coordinate.y << ") "
 					<< (current.isSource ? "source" : "destination") << " @ " << current.rate << "/s" << std::endl;
 
-				if (bestEndpoint.type == PathEndpoint::Type::ITEM)
+				if (bestEndpoint.type == ConcreteEndpoint::Type::ITEM)
 				{
 					const ItemEndpoint& other = this->itemEndpoints[bestEndpoint.index];
 					std::cout << "Other (world): index " << bestEndpoint.index << " at (" << other.coordinate.x << ", " << other.coordinate.y << ") "
@@ -572,7 +632,7 @@ private:
 		{
 			const PathConfig& path = this->pathConfigs[i];
 			std::cout << "Path " << i << ": group " << path.pathGroup << " from [";
-			if (path.source.type == PathEndpoint::Type::ITEM)
+			if (path.source.type == ConcreteEndpoint::Type::ITEM)
 			{
 				const ItemEndpoint& source = this->itemEndpoints[path.source.index];
 				std::cout << "index " << path.source.index << " item " << source.item
@@ -586,7 +646,7 @@ private:
 				std::cout << "index " << path.source.index << " group " << source.pathGroup << " @ " << this->pathGroupSpareRates[source.pathGroup] << "/s";
 			}
 			std::cout << "] to [";
-			if (path.destination.type == PathEndpoint::Type::ITEM)
+			if (path.destination.type == ConcreteEndpoint::Type::ITEM)
 			{
 				const ItemEndpoint& destination = this->itemEndpoints[path.destination.index];
 				std::cout << "index " << path.destination.index << " item " << destination.item
@@ -603,6 +663,94 @@ private:
 		}
 		std::cout << std::endl;
 		#endif
+
+		std::vector<CTNode> nodes;
+		std::vector<CTNode*> openSet;
+
+		// Create root node with all paths calculated
+		nodes.push_back({});
+		CTNode& root = nodes.back();
+		for (size_t i = 0; i < this->pathConfigs.size(); i++) root.pathsToCalculate.push_back(i);
+		calculateNode(root);
+
+		// Back out early if root is invalid
+		if (!root.isValid)
+		{
+			fitness = 0.0f;
+			return;
+		}
+
+		openSet.push_back(&root);
+
+		// While there are nodes to process
+		bool foundSolution = false;
+		CTNode* solution = nullptr;
+		while (openSet.size() > 0)
+		{
+			// Pop the node with the lowest cost
+			CTNode* current = openSet[0];
+			for (CTNode* node : openSet)
+			{
+				if (node->cost < current->cost) current = node;
+			}
+			openSet.erase(std::remove(openSet.begin(), openSet.end(), current), openSet.end());
+
+			// Validate and find constraints
+			CTConflict conflict = findConflict(*current);
+
+			// If no conflict, have found a solution
+			if (conflict.pathA == -1)
+			{
+				foundSolution = true;
+				solution = current;
+				break;
+			}
+
+			// Create new nodes for each conflicting path
+			for (size_t pathIndex : { conflict.pathA, conflict.pathB })
+			{
+				nodes.push_back({});
+				CTNode& newNode = nodes.back();
+				newNode.pathConstraints = current->pathConstraints;
+				newNode.pathConstraints[pathIndex].push_back(conflict.constraint);
+				newNode.pathsToCalculate.push_back(pathIndex);
+				newNode.allPaths = current->allPaths;
+				calculateNode(newNode);
+
+				// Only add to open set if valid
+				if (newNode.isValid)
+				{
+					openSet.push_back(&newNode);
+				}
+			}
+		}
+
+		// No solution found
+		if (!foundSolution)
+		{
+			fitness = 0.0f;
+			return;
+		}
+
+		// Solution found, calculate fitness
+		fitness = 0.0f;
+		for (size_t i = 0; i < this->pathConfigs.size(); i++)
+		{
+			if (!solution->allPaths[i]->found) continue;
+			float shortest = solution->allPaths[i]->nodes[0]->getHCost();
+			float real = solution->allPaths[i]->cost;
+			fitness += 1.0f + shortest / real;
+		}
+	}
+
+	pf::Path<PFState> calculateNode(CTNode& node)
+	{
+		return {};
+	}
+
+	CTConflict findConflict(CTNode& node)
+	{
+		return {};
 	}
 };
 
@@ -1264,12 +1412,13 @@ void checkPathfinding()
 		{ false, false, false, false, false, true, false } };
 
 	// Perform pathfinding
-	std::shared_ptr<PFState> initialState = std::make_shared<PFState>(blockedGrid, Coordinate{ 0, 0 }, PFState::BeltType::None, Direction::E);
-	std::shared_ptr<PFState> goalState = std::make_shared<PFState>(blockedGrid, Coordinate{ 2, 6 }, PFState::BeltType::None, Direction::E);
-	std::vector<std::shared_ptr<PFState>> path = pf::asPathfinding(initialState, goalState, true);
+	std::vector<PFConstraint> constraints{};
+	std::shared_ptr<PFState> goalState = std::make_shared<PFState>(blockedGrid, constraints, nullptr, Coordinate{ 2, 6 }, PFState::BeltType::None, Direction::E);
+	std::shared_ptr<PFState> initialState = std::make_shared<PFState>(blockedGrid, constraints, goalState, Coordinate{ 0, 0 }, PFState::BeltType::None, Direction::E);
+	pf::Path<PFState> path = pf::asPathfinding(initialState, true);
 
 	// Print path
-	for (std::shared_ptr<PFState> state : path) state->print();
+	for (std::shared_ptr<PFState> state : path.nodes) state->print();
 }
 
 void checkCBPathfinding()
