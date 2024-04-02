@@ -15,7 +15,7 @@ namespace ls
 			return cachedStates[hash];
 		}
 
-		static void clearCache() { cachedStates.clear(); }
+		static void clearCache() { cachedStates = std::map<size_t, std::shared_ptr<T>>(); }
 
 		static size_t getCacheSize() { return cachedStates.size(); }
 

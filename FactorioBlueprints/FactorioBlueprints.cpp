@@ -15,153 +15,6 @@
 
 // ------------------------------------------------
 
-/* Pseudocode 1
-struct RecipeTrace
-{
-	int item;
-	float rate;
-};
-
-std::stack<RecipeTrace> stack
-
-if outputItem in recipes:
-	stack.push({ outputItem, recipes[outputItem].rate * recipes[outputItem].quantity });
-
-else if outputItem in inputs:
-	stack.push({ outputItem, 0.0f });
-
-else:
-	throw "Output item has no recipe nor is an input";
-
-while stack.size() > 0:
-	current = stack.pop();
-
-	baseItemInfos[current.item].rate += current.rate;
-
-	if current.item in isInput:
-		continue
-
-	if current.item not in recipes:
-		throw "Component item has no recipe";
-
-	for ingredient in recipes[current.item].ingredients:
-		stack.push({ ingredient.item, ingredient.quantity * current.rate / recipes[current.item].quantity });
-*/
-
-/* Pseudocode 2
-
-maxSupported = 0.0
-
-for each inputItem in inputItems:
-	maxSupported = max(maxSupported,
-		inputItem.rate / itemInfo[inputItem].rate)
-
-maxSupportedCeil = ceil(maxSupported)
-
-for i = maxSupportedCeil down to 1:
-	runConfig = new RunConfig
-	runConfig.outputAssemblerCount = i
-
-	for each item in baseItemInfos:
-		runConfigItemInfo = new runConfigItemInfo(itemInfo.item)
-
-		if baseItemInfos[item].isComponent:
-			itemRecipe = problem.recipes[itemInfo.item]
-
-			outputCount = ceil(baseItemInfos[item].rate * i / INSERTER_RATE)
-			runConfigItemInfo.assemblerCount =
-				ceil(baseItemInfos[item].rate * i /
-				(itemRecipe.quantity * itemRecipe.rate))
-			runConfigItemInfo.outputInserters = outputCount
-
-			for each input in itemRecipe.ingredients:
-				inputCount = ceil(input.quantity
-					* (baseItemInfos[item].rate / itemRecipe.quantity)
-					* i / MAX_INSERTER_RATE)
-				runConfigItemInfo.inputInserters[input.item] = inputCount
-				runConfig.itemInfos[itemInfo.item] = runConfigItemInfo
-
-	possibleRunConfigs[i] = RunConfig
-
-*/
-
-/* Pseudocode 3
-
-bestRunConfig = -1
-availableSpace = problem.blueprintWidth * problem.blueprintHeight - problem.itemInputs.size() - 1
-
-for i = maxSupportedCeil down to 1:
-	runConfig = possibleRunConfigs[i]
-	requiredSpace = 0
-
-	for each item in runConfig.itemInfos:
-		requiredSpace += item.second.assemblerCount * 9
-		requiredSpace += item.second.assemblerCount *
-						 item.second.outputInserters * 2
-
-	for each itemInput in item.second.inputInserters:
-		requiredSpace += item.second.assemblerCount
-						 * itemInput.second
-
-	if requiredSpace <= availableSpace:
-		bestRunConfig = i
-		break
-
-*/
-
-/* Pseudocode 4 (Unused)
-
-pathEnds = createVector()
-blockedGrid = create2DVector(problem.blueprintWidth, problem.blueprintHeight, false)
-itemGrid = create2DVector(problem.blueprintWidth, problem.blueprintHeight, -1)
-
-// Add input and output items to the world
-for each input in problem.itemInputs:
-	itemGrid[input.second.coordinate.x][input.second.coordinate.y] = input.first
-	pathEnds.pushBack({input.first, true, input.second.coordinate})
-
-itemGrid[problem.itemOutput.coordinate.x][problem.itemOutput.coordinate.y] = problem.itemOutput.item
-pathEnds.pushBack({problem.itemOutput.item, false, problem.itemOutput.coordinate})
-
-for each assembler in assemblers:
-	for x = 0 to 2:
-		for y = 0 to 2:
-			coord = {assembler.coordinate.x + x, assembler.coordinate.y + y}
-			if blockedGrid[coord.x][coord.y]: worldCost += 1.0
-			if itemGrid[coord.x][coord.y] != -1: worldCost += 1.0
-			blockedGrid[coord.x][coord.y] = true
-
-	// Check each of 12 inserter positions for blocked
-	for i = 0 to 11:
-		inserter = assembler.inserters[i]
-		if inserter.item == -1: continue
-		offset = AssemblerInstance::inserterOffsets[i]
-		coord = {assembler.coordinate.x + offset.x, assembler.coordinate.y + offset.y}
-		if coord.x < 0 or coord.x >= problem.blueprintWidth or coord.y < 0 or coord.y >= problem.blueprintHeight:
-			worldCost += 1.0
-			continue
-		if blockedGrid[coord.x][coord.y]: worldCost += 1.0
-		if itemGrid[coord.x][coord.y] != -1: worldCost += 1.0
-		blockedGrid[coord.x][coord.y] = true
-
-		// Check inserter open side for items or blocked
-		checkDir = AssemblerInstance::inserterDirections[i]
-		checkOffset = dirOffset(checkDir)
-		checkCoord = {coord.x + checkOffset.x, coord.y + checkOffset.y}
-		if checkCoord.x < 0 or checkCoord.x >= problem.blueprintWidth or checkCoord.y < 0 or checkCoord.y >= problem.blueprintHeight:
-			worldCost += 1.0
-			continue
-		if blockedGrid[checkCoord.x][checkCoord.y]: worldCost += 1.0
-		if itemGrid[checkCoord.x][checkCoord.y] != -1 and itemGrid[checkCoord.x][checkCoord.y] != inserter.item: worldCost += 1.0
-		itemGrid[checkCoord.x][checkCoord.y] = inserter.item
-		pathEnds.pushBack({inserter.item, not inserter.isInput, checkCoord})
-
-isWorldValid = worldCost == 0.0
-
-*/
-
-// ------------------------------------------------
-
 enum class Direction { N, S, W, E };
 
 struct Coordinate
@@ -206,39 +59,53 @@ std::string dirString(Direction dir)
 	return "N";
 }
 
-struct RecipeIngredient
-{
-	int item = -1;
-	int quantity = 0;
+const std::vector<Direction> INSERTER_DIRECTIONS = {
+	Direction::N, Direction::N, Direction::N,
+	Direction::E, Direction::E, Direction::E,
+	Direction::S, Direction::S, Direction::S,
+	Direction::W, Direction::W, Direction::W
+};
+
+const std::vector<Coordinate> INSERTER_OFFSETS = {
+	{ 0, -1 }, { 1, -1 }, { 2, -1 },
+	{ 3, 0 }, { 3, 1 }, { 3, 2 },
+	{ 2, 3 }, { 1, 3 }, { 0, 3 },
+	{ -1, 2 }, { -1, 1 }, { -1, 0 }
 };
 
 struct Recipe
 {
+	struct Ingredient
+	{
+		int item = -1;
+		int quantity = 0;
+	};
+
 	int quantity = 0;
 	float rate = 0;
-	std::vector<RecipeIngredient> ingredients;
-};
-
-struct ProblemItemInput
-{
-	int item = -1;
-	float rate = 0;
-	Coordinate coordinate;
-};
-
-struct ProblemItemOutput
-{
-	int item = -1;
-	Coordinate coordinate;
+	std::vector<Ingredient> ingredients;
 };
 
 struct ProblemDefinition
 {
+	struct ItemInput
+	{
+		int item = -1;
+		float rate = 0;
+		Coordinate coordinate;
+	};
+
+	struct ItemOutput
+	{
+		int item = -1;
+		Coordinate coordinate;
+	};
+
 	int blueprintWidth = -1;
 	int blueprintHeight = -1;
 	std::map<int, Recipe> recipes;
-	std::map<int, ProblemItemInput> itemInputs;
-	ProblemItemOutput itemOutput;
+	std::map<int, ItemInput> itemInputs;
+	ItemOutput itemOutput;
 };
 
 class ProblemDefinitionFactory
@@ -285,92 +152,6 @@ private:
 
 // ------------------------------------------------
 
-// Info extracted from recipes about item
-// rate relative to output item rate
-struct ItemInfo
-{
-	int item = -1;
-	bool isComponent = false;
-	float rate = 0.0f;
-};
-
-// For a given run how many assemblers are required for an item
-// and how many inserters are required for output / each input
-struct RunConfigItemInfo
-{
-	struct InserterRequirement { int count; float rate; };
-
-	int item = -1;
-	int assemblerCount = 0;
-	int outputInsertersPerAssembler = 0;
-	float outputInsertersRate = 0.0f;
-	std::map<int, InserterRequirement> inputInsertersPerAssembler;
-};
-
-// A given run of the solver with a set amount of
-// output assemblers and the required item info
-struct RunConfig
-{
-	int outputAssemblerCount = 0;
-	std::map<int, RunConfigItemInfo> itemInfos;
-};
-
-// An inserter in an AsemblerInstance in an LSState
-struct InserterInstance
-{
-	int item = -1;
-	float rate = 0.0f;
-	bool isInput = false;
-};
-
-// An assembler placed in an LSState
-struct AssemblerInstance
-{
-	static const std::vector<Direction> inserterDirections;
-	static const std::vector<Coordinate> inserterOffsets;
-
-	int item = -1;
-	Coordinate coordinate;
-	InserterInstance inserters[12];
-};
-
-const std::vector<Direction> AssemblerInstance::inserterDirections = {
-	Direction::N, Direction::N, Direction::N,
-	Direction::E, Direction::E, Direction::E,
-	Direction::S, Direction::S, Direction::S,
-	Direction::W, Direction::W, Direction::W
-};
-
-const std::vector<Coordinate> AssemblerInstance::inserterOffsets = {
-	{ 0, -1 }, { 1, -1 }, { 2, -1 },
-	{ 3, 0 }, { 3, 1 }, { 3, 2 },
-	{ 2, 3 }, { 1, 3 }, { 0, 3 },
-	{ -1, 2 }, { -1, 1 }, { -1, 0 }
-};
-
-struct ItemPathEnd
-{
-	int item;
-	float rate;
-	bool isSource;
-	Coordinate coordinate;
-};
-
-struct ItemPathEnds
-{
-	std::vector<ItemPathEnd> sources;
-	std::vector<ItemPathEnd> destinations;
-};
-
-struct ConcretePathEnd
-{
-	enum class Type { END, PATH };
-	Type type;
-	int index;
-};
-
-// A state represents a position on the map with a belt type and direction
-// Used for pathfinding to find a path from one location to another
 class PFState : public pf::State<PFState>
 {
 public:
@@ -545,45 +326,363 @@ private:
 	float hCost = 0.0f;
 };
 
-// Used by the LSState to perform multi-agent pathfinding
-class CBPathfinding
+struct RunConfig
+{
+	struct ItemConfig
+	{
+		struct InserterRequirement { int count; float rate; };
+
+		int item = -1;
+		int assemblerCount = 0;
+		InserterRequirement outputInserterRequirement;
+		std::map<int, InserterRequirement> inputInserterRequirements;
+	};
+
+	int outputAssemblerCount = 0;
+	std::map<int, ItemConfig> itemConfigs;
+};
+
+struct ItemEndpoint
+{
+	int item;
+	float rate;
+	bool isSource;
+	Coordinate coordinate;
+};
+
+struct PathEndpoint
+{
+	enum class Type { ITEM, PATH };
+	Type type;
+	size_t index;
+};
+
+struct PathConfig
+{
+	PathEndpoint source;
+	PathEndpoint destination;
+	size_t pathGroup;
+	std::vector<size_t> dependantPaths = std::vector<size_t>();
+};
+
+class CBPathfinder
 {
 public:
-	CBPathfinding(const std::vector<std::vector<bool>>& blockedGrid, const std::vector<ItemPathEnd>& pathEnds)
-		: blockedGrid(blockedGrid), pathEnds(pathEnds)
+	CBPathfinder(const std::vector<std::vector<bool>>& blockedGrid, const std::vector<ItemEndpoint>& itemEndpoints)
+		: blockedGrid(blockedGrid), itemEndpoints(itemEndpoints)
 	{}
+
+	float getFitness()
+	{
+		if (fitnessCalculated) return fitness;
+		solve();
+		fitnessCalculated = true;
+		return fitness;
+	}
+
+private:
+	/*
+	struct CTConstraint
+	{
+		size_t pathIndex;
+		Coordinate position;
+		bool underground;
+	};
+
+	struct CTConflict
+	{
+		Coordinate position;
+		bool underground;
+	};
+
+	struct CAT
+	{};
+
+	struct CTNode
+	{
+		CAT conflictTable;
+		size_t conflictCount;
+		float cost;
+	};
+	*/
+
+	const std::vector<std::vector<bool>>& blockedGrid;
+	const std::vector<ItemEndpoint>& itemEndpoints;
+
+	size_t currentPathGroup = 0;
+	std::map<size_t, float> pathGroupSpareRates;
+	std::vector<PathConfig> pathConfigs;
+	bool fitnessCalculated = false;
+	float fitness = 0.0f;
 
 	void solve()
 	{
-		// Print out path ends
-		for (const auto& pathEnd : pathEnds)
-		{
-			std::cout << "Path end: " << pathEnd.item
-				<< " at (" << pathEnd.coordinate.x << ", " << pathEnd.coordinate.y << ") "
-				<< (pathEnd.isSource ? "source" : "destination")
-				<< " @ " << pathEnd.rate << "/s" << std::endl;
-		}
-		std::cout << std::endl;
-
 		fitness = 0.0f;
+		preprocessPaths();
+		performPathfinding();
 	}
 
-	float getFitness() const { return fitness; }
+	void preprocessPaths()
+	{
+		pathConfigs = std::vector<PathConfig>();
 
-private:
-	const std::vector<std::vector<bool>>& blockedGrid;
-	const std::vector<ItemPathEnd>& pathEnds;
+		#ifdef LOG
+		// Print out path ends
+		for (size_t i = 0; i < this->itemEndpoints.size(); i++)
+		{
+			const ItemEndpoint& endpoint = this->itemEndpoints[i];
+			std::cout << "Endpoint " << i << ": item " << endpoint.item
+				<< " at (" << endpoint.coordinate.x << ", " << endpoint.coordinate.y << ") "
+				<< (endpoint.isSource ? "source" : "destination")
+				<< " @ " << endpoint.rate << "/s" << std::endl;
+		}
+		std::cout << std::endl;
+		#endif
 
-	std::map<int, ItemPathEnds> itemPathEnds;
-	float fitness = 0.0f;
+		// Seperate end points by item
+		std::map<int, std::vector<size_t>> itemsEndpoints = std::map<int, std::vector<size_t>>();
+		for (size_t i = 0; i < this->itemEndpoints.size(); i++)
+		{
+			const ItemEndpoint& endpoint = this->itemEndpoints[i];
+			if (itemsEndpoints.find(endpoint.item) == itemsEndpoints.end())
+			{
+				itemsEndpoints[endpoint.item] = std::vector<size_t>();
+			}
+			itemsEndpoints[endpoint.item].push_back(i);
+		}
+
+		// Process each items endpoints
+		for (auto& item : itemsEndpoints)
+		{
+			// Sort endpoints based on rate
+			std::sort(item.second.begin(), item.second.end(), [&](size_t a, size_t b) { return this->itemEndpoints[a].rate < this->itemEndpoints[b].rate; });
+			auto& endpoints = item.second;
+
+			// Keep track of paths for this item
+			std::set<size_t> paths = std::set<size_t>();
+
+			// While there are endpoints to process, grab the highest rate
+			while (endpoints.size() > 0)
+			{
+				size_t currentIndex = endpoints.back();
+				endpoints.pop_back();
+				const ItemEndpoint& current = this->itemEndpoints[currentIndex];
+
+				// Find the most suitable endpoint, minimising |spareRate|, and prioritising > 0
+				float bestSpareRate = std::numeric_limits<float>::max();
+				PathEndpoint bestEndpoint;
+				bool bestIsPriority = false;
+
+				// Check all compatible item endpoints
+				for (size_t i = 0; i < endpoints.size(); i++)
+				{
+					size_t otherIndex = endpoints[i];
+					const ItemEndpoint& other = this->itemEndpoints[otherIndex];
+					if (current.isSource == other.isSource) continue;
+
+					float spareRate;
+					if (current.isSource) spareRate = current.rate - other.rate;
+					else spareRate = other.rate - current.rate;
+					bool isPriority = spareRate >= 0;
+
+					// Consider priority, then smallest absolute spare rate
+					if ((!bestIsPriority && isPriority) || ((bestIsPriority == isPriority) && (abs(spareRate) < abs(bestSpareRate))))
+					{
+						bestSpareRate = spareRate;
+						bestEndpoint = { PathEndpoint::Type::ITEM, otherIndex };
+						bestIsPriority = isPriority;
+					}
+				}
+
+				// Check all paths for this item
+				for (size_t pathIndex : paths)
+				{
+					const PathConfig& path = this->pathConfigs[pathIndex];
+
+					float currentSpareRate = this->pathGroupSpareRates[path.pathGroup];
+					float newSpareRate;
+					if (current.isSource) newSpareRate = current.rate + currentSpareRate;
+					else newSpareRate = currentSpareRate - current.rate;
+					bool isPriority = newSpareRate >= 0;
+
+					// Consider priority, then smallest absolute spare rate
+					if ((!bestIsPriority && isPriority) || (bestIsPriority == isPriority && (abs(newSpareRate) < abs(bestSpareRate))))
+					{
+						bestSpareRate = newSpareRate;
+						bestEndpoint = { PathEndpoint::Type::PATH, pathIndex };
+						bestIsPriority = isPriority;
+					}
+				}
+
+				// Create the concrete endpoint for the current item endpoint
+				PathEndpoint currentEndpoint = { PathEndpoint::Type::ITEM, currentIndex };
+
+				// Add a path with the current and best endpoint
+				size_t pathIndex = this->pathConfigs.size();
+				size_t pathGroup = (bestEndpoint.type == PathEndpoint::Type::PATH) ? this->pathConfigs[bestEndpoint.index].pathGroup : this->currentPathGroup++;
+				if (current.isSource) this->pathConfigs.push_back({ currentEndpoint, bestEndpoint, pathGroup });
+				else this->pathConfigs.push_back({ bestEndpoint, currentEndpoint, pathGroup });
+				paths.insert(pathIndex);
+
+				// Add the path to the dependant paths of the best endpoint
+				if (bestEndpoint.type == PathEndpoint::Type::PATH)
+				{
+					this->pathConfigs[bestEndpoint.index].dependantPaths.push_back(pathIndex);
+				}
+
+				// Remove the best endpoint from the list of endpoints
+				else if (bestEndpoint.type == PathEndpoint::Type::ITEM)
+				{
+					endpoints.erase(std::remove(endpoints.begin(), endpoints.end(), bestEndpoint.index), endpoints.end());
+				}
+
+				#ifdef LOG
+				// Log picked choices
+				std::cout << "Current: index " << currentIndex << ", item " << current.item << " at (" << current.coordinate.x << ", " << current.coordinate.y << ") "
+					<< (current.isSource ? "source" : "destination") << " @ " << current.rate << "/s" << std::endl;
+
+				if (bestEndpoint.type == PathEndpoint::Type::ITEM)
+				{
+					const ItemEndpoint& other = this->itemEndpoints[bestEndpoint.index];
+					std::cout << "Other (world): index " << bestEndpoint.index << " at (" << other.coordinate.x << ", " << other.coordinate.y << ") "
+						<< (other.isSource ? "source" : "destination") << " @ " << other.rate << "/s" << std::endl;
+				}
+				else
+				{
+					const PathConfig& path = this->pathConfigs[bestEndpoint.index];
+					float groupSpareRate = this->pathGroupSpareRates[path.pathGroup];
+					std::cout << "Other (path): index " << bestEndpoint.index << " spare rate @ " << groupSpareRate << "/s" << std::endl;
+				}
+
+				// Log created path
+				std::cout << "Created path: index " << pathIndex << " group " << pathGroup << " new spare rate @ " << bestSpareRate << "/s" << std::endl << std::endl;
+				#endif
+
+				// Update the spare rate of the path group
+				this->pathGroupSpareRates[pathGroup] = bestSpareRate;
+			}
+		}
+	}
+
+	void performPathfinding()
+	{
+		#ifdef LOG
+		// Print out paths
+		for (size_t i = 0; i < this->pathConfigs.size(); i++)
+		{
+			const PathConfig& path = this->pathConfigs[i];
+			std::cout << "Path " << i << ": group " << path.pathGroup << " from [";
+			if (path.source.type == PathEndpoint::Type::ITEM)
+			{
+				const ItemEndpoint& source = this->itemEndpoints[path.source.index];
+				std::cout << "index " << path.source.index << " item " << source.item
+					<< " at (" << source.coordinate.x << ", " << source.coordinate.y << ") "
+					<< (source.isSource ? "source" : "destination")
+					<< " @ " << source.rate << "/s";
+			}
+			else
+			{
+				const PathConfig& source = this->pathConfigs[path.source.index];
+				std::cout << "index " << path.source.index << " group " << source.pathGroup << " @ " << this->pathGroupSpareRates[source.pathGroup] << "/s";
+			}
+			std::cout << "] to [";
+			if (path.destination.type == PathEndpoint::Type::ITEM)
+			{
+				const ItemEndpoint& destination = this->itemEndpoints[path.destination.index];
+				std::cout << "index " << path.destination.index << " item " << destination.item
+					<< " at (" << destination.coordinate.x << ", " << destination.coordinate.y << ") "
+					<< (destination.isSource ? "source" : "destination")
+					<< " @ " << destination.rate << "/s";
+			}
+			else
+			{
+				const PathConfig& destination = this->pathConfigs[path.destination.index];
+				std::cout << "index " << path.destination.index << " group " << destination.pathGroup << " @ " << this->pathGroupSpareRates[destination.pathGroup] << "/s";
+			}
+			std::cout << "]" << std::endl;
+		}
+		std::cout << std::endl;
+		#endif
+	}
 };
 
-// A state represents a successfully placed set of assemblers / inserters
-// A valid state is one which delivers the output item
-// The fitness of a state is determined by a CB pathfinding algorithm
 class LSState : public ls::State<LSState>
 {
 public:
+	struct InserterInstance
+	{
+		int item = -1;
+		float rate = 0.0f;
+		bool isInput = false;
+	};
+
+	struct AssemblerInstance
+	{
+		static const std::vector<Direction> inserterDirections;
+		static const std::vector<Coordinate> inserterOffsets;
+
+		int item = -1;
+		Coordinate coordinate;
+		InserterInstance inserters[12];
+	};
+
+public:
+	static std::shared_ptr<LSState> createRandom(const ProblemDefinition& problem, const RunConfig& runConfig)
+	{
+		std::vector<AssemblerInstance> assemblers;
+
+		// For each item type
+		for (const auto& itemConfigPair : runConfig.itemConfigs)
+		{
+			const auto& itemConfig = itemConfigPair.second;
+			if (itemConfig.assemblerCount == 0) continue;
+
+			// Randomly place assemblers
+			for (int i = 0; i < itemConfig.assemblerCount; i++)
+			{
+				Coordinate coord;
+				coord.x = rand() % (problem.blueprintWidth - 2);
+				coord.y = rand() % (problem.blueprintHeight - 2);
+				AssemblerInstance assembler{ itemConfig.item, coord };
+
+				// Available inserters for this assembler
+				std::vector<int> availableInserters(12);
+				for (int i = 0; i < 12; i++) availableInserters[i] = i;
+
+				// Randomly place input inserters
+				for (const auto& inputRequirement : itemConfig.inputInserterRequirements)
+				{
+					for (int i = 0; i < inputRequirement.second.count; i++)
+					{
+						int index = rand() % availableInserters.size();
+						int inserterIndex = availableInserters[index];
+						availableInserters.erase(availableInserters.begin() + index);
+						assembler.inserters[inserterIndex] = InserterInstance{ inputRequirement.first, inputRequirement.second.rate, true };
+					}
+				}
+
+				// Randomly place output inserters
+				for (int i = 0; i < itemConfig.outputInserterRequirement.count; i++)
+				{
+					int index = rand() % availableInserters.size();
+					int inserterIndex = availableInserters[index];
+					availableInserters.erase(availableInserters.begin() + index);
+					assembler.inserters[inserterIndex] = InserterInstance{ itemConfig.item, itemConfig.outputInserterRequirement.rate, false };
+				}
+
+				assemblers.push_back(assembler);
+			}
+		}
+
+		return std::make_shared<LSState>(problem, runConfig, assemblers);
+	}
+
+	LSState(const ProblemDefinition& problem, const RunConfig& runConfig, const std::vector<AssemblerInstance>& assemblers)
+		: problem(problem), runConfig(runConfig), assemblers(assemblers)
+	{
+		calculateHash();
+	}
+
 	float getFitness() override
 	{
 		if (costCalculated) return fitness;
@@ -595,8 +694,7 @@ public:
 
 		if (isWorldValid)
 		{
-			pathfinding = std::make_shared<CBPathfinding>(blockedGrid, pathEnds);
-			pathfinding->solve();
+			pathfinding = std::make_shared<CBPathfinder>(blockedGrid, itemEndpoints);
 			fitness += pathfinding->getFitness();
 		}
 
@@ -652,63 +750,6 @@ public:
 		return neighbours;
 	}
 
-public:
-	static std::shared_ptr<LSState> createRandom(const ProblemDefinition& problem, const RunConfig& runConfig)
-	{
-		std::vector<AssemblerInstance> assemblers;
-
-		// For each item type
-		for (const auto& item : runConfig.itemInfos)
-		{
-			const RunConfigItemInfo& itemInfo = item.second;
-			if (itemInfo.assemblerCount == 0) continue;
-
-			// Randomly place assemblers
-			for (int i = 0; i < itemInfo.assemblerCount; i++)
-			{
-				Coordinate coord;
-				coord.x = rand() % (problem.blueprintWidth - 2);
-				coord.y = rand() % (problem.blueprintHeight - 2);
-				AssemblerInstance assembler{ item.first, coord };
-
-				// Available inserters for this assembler
-				std::vector<int> availableInserters(12);
-				for (int i = 0; i < 12; i++) availableInserters[i] = i;
-
-				// Randomly place input inserters
-				for (const auto& input : itemInfo.inputInsertersPerAssembler)
-				{
-					for (int i = 0; i < input.second.count; i++)
-					{
-						int index = rand() % availableInserters.size();
-						int inserterIndex = availableInserters[index];
-						availableInserters.erase(availableInserters.begin() + index);
-						assembler.inserters[inserterIndex] = InserterInstance{ input.first, input.second.rate, true };
-					}
-				}
-
-				// Randomly place output inserters
-				for (int i = 0; i < itemInfo.outputInsertersPerAssembler; i++)
-				{
-					int index = rand() % availableInserters.size();
-					int inserterIndex = availableInserters[index];
-					availableInserters.erase(availableInserters.begin() + index);
-					assembler.inserters[inserterIndex] = InserterInstance{ item.first, itemInfo.outputInsertersRate, false };
-				}
-
-				assemblers.push_back(assembler);
-			}
-		}
-
-		return std::make_shared<LSState>(problem, runConfig, assemblers);
-	}
-
-	LSState(const ProblemDefinition& problem, const RunConfig& runConfig, const std::vector<AssemblerInstance>& assemblers)
-		: problem(problem), runConfig(runConfig), assemblers(assemblers)
-	{
-		calculateHash();
-	}
-
 	bool getValid()
 	{
 		calculateWorld();
@@ -761,7 +802,7 @@ public:
 					std::cout << "  Inserter: index " << i
 						<< " item " << inserter.item
 						<< (inserter.isInput ? " input" : " output")
-						<< " at (" << assembler.coordinate.x + AssemblerInstance::inserterOffsets[i].x << ", " << assembler.coordinate.y + AssemblerInstance::inserterOffsets[i].y << ")"
+						<< " at (" << assembler.coordinate.x + INSERTER_OFFSETS[i].x << ", " << assembler.coordinate.y + INSERTER_OFFSETS[i].y << ")"
 						<< " @ " << inserter.rate << "/s" << std::endl;
 				}
 			}
@@ -784,16 +825,16 @@ private:
 	std::vector<std::shared_ptr<LSState>> neighbours;
 	std::vector<std::vector<bool>> blockedGrid;
 	std::vector<std::vector<int>> itemGrid;
-	std::vector<ItemPathEnd> pathEnds;
+	std::vector<ItemEndpoint> itemEndpoints;
 	float worldCost = 0.0f;
-	std::shared_ptr<CBPathfinding> pathfinding;
+	std::shared_ptr<CBPathfinder> pathfinding;
 	float fitness = 0.0f;
 
 	void calculateWorld()
 	{
 		if (worldCalculated) return;
 
-		pathEnds = std::vector<ItemPathEnd>();
+		itemEndpoints = std::vector<ItemEndpoint>();
 		blockedGrid = std::vector<std::vector<bool>>(problem.blueprintWidth, std::vector<bool>(problem.blueprintHeight, false));
 		itemGrid = std::vector<std::vector<int>>(problem.blueprintWidth, std::vector<int>(problem.blueprintHeight, -1));
 
@@ -801,10 +842,10 @@ private:
 		for (const auto& input : problem.itemInputs)
 		{
 			itemGrid[input.second.coordinate.x][input.second.coordinate.y] = input.first;
-			pathEnds.push_back({ input.first, input.second.rate, true, input.second.coordinate });
+			itemEndpoints.push_back({ input.first, input.second.rate, true, input.second.coordinate });
 		}
 		itemGrid[problem.itemOutput.coordinate.x][problem.itemOutput.coordinate.y] = problem.itemOutput.item;
-		pathEnds.push_back({ problem.itemOutput.item, -1.0f, false, problem.itemOutput.coordinate });
+		itemEndpoints.push_back({ problem.itemOutput.item, 0.0f, false, problem.itemOutput.coordinate });
 
 		for (const auto& assembler : assemblers)
 		{
@@ -828,7 +869,7 @@ private:
 				const InserterInstance& inserter = assembler.inserters[i];
 				if (inserter.item == -1) continue;
 
-				Coordinate offset = AssemblerInstance::inserterOffsets[i];
+				Coordinate offset = INSERTER_OFFSETS[i];
 				Coordinate coord = { assembler.coordinate.x + offset.x, assembler.coordinate.y + offset.y };
 
 				if (coord.x < 0 || coord.x >= problem.blueprintWidth || coord.y < 0 || coord.y >= problem.blueprintHeight)
@@ -843,7 +884,7 @@ private:
 				blockedGrid[coord.x][coord.y] = true;
 
 				// Check inserter open side for items or blocked
-				Direction checkDir = AssemblerInstance::inserterDirections[i];
+				Direction checkDir = INSERTER_DIRECTIONS[i];
 				Coordinate checkOffset = dirOffset(checkDir);
 				Coordinate checkCoord = { coord.x + checkOffset.x, coord.y + checkOffset.y };
 
@@ -857,7 +898,7 @@ private:
 				if (itemGrid[checkCoord.x][checkCoord.y] != -1 && itemGrid[checkCoord.x][checkCoord.y] != inserter.item) worldCost += 1.0f;
 
 				itemGrid[checkCoord.x][checkCoord.y] = inserter.item;
-				pathEnds.push_back({ inserter.item, inserter.rate, !inserter.isInput, checkCoord });
+				itemEndpoints.push_back({ inserter.item, inserter.rate, !inserter.isInput, checkCoord });
 			}
 		}
 
@@ -886,12 +927,20 @@ std::map<size_t, std::shared_ptr<LSState>> LSState::cachedStates = std::map<size
 class ProblemSolver
 {
 public:
+	struct ItemInfo
+	{
+		int item = -1;
+		bool isComponent = false;
+		float rate = 0.0f;
+	};
+
+public:
 	static constexpr float MAX_INSERTER_RATE = 4.62f;
 	static constexpr float MAX_CONVEYOR_RATE = 45.0f;
 
-	// Produce a solver object with parameters then solve
 	static ProblemSolver solve(const ProblemDefinition& problem)
 	{
+		// Produce a solver object with parameters then solve
 		ProblemSolver solver(problem);
 		solver.solve();
 		return solver;
@@ -927,7 +976,7 @@ private:
 	// Populates this->baseItemInfos and componentItemCount
 	void unravelRecipes()
 	{
-		struct SolverRecipeTrace
+		struct RecipeTrace
 		{
 			int item;
 			float rate;
@@ -970,28 +1019,28 @@ private:
 		// Keep track of component items and relative rates
 		componentItemCount = 0;
 		baseItemInfos.clear();
-		std::stack<SolverRecipeTrace> recipeTraceStack;
+		std::stack<RecipeTrace> traceStack;
 
 		// Output has a recipe so add to stack with relative rate for 1 assembler
 		int outputItem = problem.itemOutput.item;
 		if (problem.recipes.find(outputItem) != problem.recipes.end())
 		{
 			const auto& outputRecipe = problem.recipes.at(outputItem);
-			recipeTraceStack.push({ outputItem, outputRecipe.rate * outputRecipe.quantity });
+			traceStack.push({ outputItem, outputRecipe.rate * outputRecipe.quantity });
 		}
 
 		// Output is an input so add to stack with no info
 		else if (problem.itemInputs.find(outputItem) != problem.itemInputs.end())
-			recipeTraceStack.push({ outputItem, 0.0f });
+			traceStack.push({ outputItem, 0.0f });
 
 		// Output cannot be reached so error
 		else throw std::exception(("Output item (" + std::to_string(outputItem) + ") has no recipe nor is an input.").c_str());
 
 		// Process traced items while any left
-		while (recipeTraceStack.size() > 0)
+		while (traceStack.size() > 0)
 		{
-			const auto current = recipeTraceStack.top();
-			recipeTraceStack.pop();
+			const auto current = traceStack.top();
+			traceStack.pop();
 
 			// Initialize or update item info for item
 			bool isInput = problem.itemInputs.find(current.item) != problem.itemInputs.end();
@@ -1013,7 +1062,7 @@ private:
 			const auto& currentRecipe = problem.recipes.at(current.item);
 			for (const auto& ingredient : currentRecipe.ingredients)
 			{
-				recipeTraceStack.push({ ingredient.item, ingredient.quantity * current.rate / currentRecipe.quantity });
+				traceStack.push({ ingredient.item, ingredient.quantity * current.rate / currentRecipe.quantity });
 			}
 		}
 
@@ -1048,7 +1097,7 @@ private:
 		float maxSupported = 0.0f;
 		for (const auto& input : problem.itemInputs)
 		{
-			const ProblemItemInput& inputItem = input.second;
+			const auto& inputItem = input.second;
 			const auto& itemInfo = baseItemInfos.at(inputItem.item);
 			float itemsSupportedCount = inputItem.rate / itemInfo.rate;
 			maxSupported = std::max(maxSupported, itemsSupportedCount);
@@ -1061,10 +1110,11 @@ private:
 			RunConfig runConfig;
 			runConfig.outputAssemblerCount = i;
 
-			for (const auto& item : baseItemInfos)
+			// For each item produce an item config
+			for (const auto& itemPair : baseItemInfos)
 			{
-				const ItemInfo& itemInfo = item.second;
-				RunConfigItemInfo runConfigItemInfo{ itemInfo.item };
+				const ItemInfo& itemInfo = itemPair.second;
+				RunConfig::ItemConfig itemConfig{ itemInfo.item };
 
 				// If it is a component item calculate assemblers and inserters counts
 				if (itemInfo.isComponent)
@@ -1076,21 +1126,22 @@ private:
 					int assemblerCount = static_cast<int>(std::ceil(totalRate / singleRate));
 					float realSingleRate = totalRate / assemblerCount;
 					int outputCount = static_cast<int>(std::ceil(realSingleRate / MAX_INSERTER_RATE));
+					float singleOutputRate = realSingleRate / outputCount;
 
-					runConfigItemInfo.assemblerCount = assemblerCount;
-					runConfigItemInfo.outputInsertersPerAssembler = outputCount;
-					runConfigItemInfo.outputInsertersRate = realSingleRate / outputCount;
+					itemConfig.assemblerCount = assemblerCount;
+					itemConfig.outputInserterRequirement = { outputCount, singleOutputRate };
 
 					for (const auto& input : itemRecipe.ingredients)
 					{
 						float totalInputRate = realSingleRate * (input.quantity / itemRecipe.quantity);
 						int inputCount = static_cast<int>(std::ceil(totalInputRate / MAX_INSERTER_RATE));
-						float inputRate = totalInputRate / inputCount;
-						runConfigItemInfo.inputInsertersPerAssembler[input.item] = { inputCount, inputRate };
+						float singleInputRate = totalInputRate / inputCount;
+
+						itemConfig.inputInserterRequirements[input.item] = { inputCount, singleInputRate };
 					}
 				}
 
-				runConfig.itemInfos[itemInfo.item] = runConfigItemInfo;
+				runConfig.itemConfigs[itemInfo.item] = itemConfig;
 			}
 
 			possibleRunConfigs[i] = runConfig;
@@ -1101,7 +1152,7 @@ private:
 		{
 			const auto& runConfig = possibleRunConfigs[i];
 			std::cout << "Run Config with output assemblers = " << runConfig.outputAssemblerCount << std::endl;
-			for (const auto& item : runConfig.itemInfos)
+			for (const auto& item : runConfig.itemConfigs)
 			{
 				if (item.second.assemblerCount == 0)
 				{
@@ -1111,10 +1162,10 @@ private:
 				{
 					std::cout << "\tComponent item: " << item.first << std::endl;
 					std::cout << "\t  Assemblers: " << item.second.assemblerCount << std::endl;
-					std::cout << "\t  Output inserters / assembler: " << item.second.outputInsertersPerAssembler << " @ " << item.second.outputInsertersRate << "/s" << std::endl;
-					for (const auto& itemInput : item.second.inputInsertersPerAssembler)
+					std::cout << "\t  Output inserters / assembler: " << item.second.outputInserterRequirement.count << " @ " << item.second.outputInserterRequirement.rate << "/s" << std::endl;
+					for (const auto& inputRequirement : item.second.inputInserterRequirements)
 					{
-						std::cout << "\t  Input inserters / assembler for " << itemInput.first << ": " << itemInput.second.count << " @ " << itemInput.second.rate << "/s" << std::endl;
+						std::cout << "\t  Input inserters / assembler for " << inputRequirement.first << ": " << inputRequirement.second.count << " @ " << inputRequirement.second.rate << "/s" << std::endl;
 					}
 				}
 			}
@@ -1129,13 +1180,13 @@ private:
 		{
 			const auto& runConfig = possibleRunConfigs[i];
 			size_t requiredSpace = 0;
-			for (const auto& item : runConfig.itemInfos)
+			for (const auto& itemConfig : runConfig.itemConfigs)
 			{
-				requiredSpace += item.second.assemblerCount * 9;
-				requiredSpace += item.second.assemblerCount * item.second.outputInsertersPerAssembler * 2;
-				for (const auto& itemInput : item.second.inputInsertersPerAssembler)
+				requiredSpace += itemConfig.second.assemblerCount * 9;
+				requiredSpace += itemConfig.second.assemblerCount * itemConfig.second.outputInserterRequirement.count * 2;
+				for (const auto& inputRequirement : itemConfig.second.inputInserterRequirements)
 				{
-					requiredSpace += item.second.assemblerCount * itemInput.second.count * 2;
+					requiredSpace += itemConfig.second.assemblerCount * inputRequirement.second.count * 2;
 				}
 			}
 
@@ -1238,12 +1289,12 @@ void checkCBPathfinding()
 	// Setup example local search state
 	RunConfig runConfig;
 	runConfig.outputAssemblerCount = 1;
-	runConfig.itemInfos[0] = { 0, 0, 0, 0.0f };
-	runConfig.itemInfos[1] = { 1, 2, 1, 0.5f, { { 0, { 1, 0.5f } } } };
-	runConfig.itemInfos[2] = { 2, 1, 1, 0.5f, { { 0, { 1, 1.0f } }, { 1, { 1, 1.0f }}} };
+	runConfig.itemConfigs[0] = { 0, 0, 0, 0.0f };
+	runConfig.itemConfigs[1] = { 1, 2, 1, 0.5f, { { 0, { 1, 0.5f } } } };
+	runConfig.itemConfigs[2] = { 2, 1, 1, 0.5f, { { 0, { 1, 1.0f } }, { 1, { 1, 1.0f }}} };
 
-	InserterInstance none{ -1, false };
-	std::vector<AssemblerInstance> assemblers;
+	LSState::InserterInstance none{ -1, false };
+	std::vector<LSState::AssemblerInstance> assemblers;
 	assemblers.push_back({ 1, { 5, 0 }, { none, none, none, none, none, { 1, 0.5f, false }, { 0, 0.5f, true }, none, none, none, none, none } });
 	assemblers.push_back({ 1, { 3, 7 }, { none, none, none, { 0, 0.5f, true }, none, none, none, none, none, none, none, { 1, 0.5f, false } } });
 	assemblers.push_back({ 2, { 2, 4 }, { none, none, { 0, 1.0f, true }, { 2, 0.5f, false }, none, none, none, none, none, none, { 1, 1.0f, true }, none } });
