@@ -16,13 +16,11 @@
 
 // ------------------------------------------------
 
+enum class BeltType { None, Inserter, Conveyor, UndergroundEntrance, Underground, UndergroundExit };
+
 enum class Direction { N, S, W, E };
 
-struct Coordinate
-{
-	int x = 0;
-	int y = 0;
-};
+struct Coordinate { int x = 0; int y = 0; };
 
 Direction dirOpposite(Direction dir)
 {
@@ -153,32 +151,163 @@ private:
 
 // ------------------------------------------------
 
-struct PFConstraint
+struct CATEntry
 {
+	size_t coordinateHash;
+	size_t conflictFlags;
+};
+
+CATEntry calculateCATEntry(Coordinate coordinate, BeltType type, Direction direction)
+{
+	// Calculate coordinate hash
+	std::hash<size_t> hasher;
+	size_t coordinateHash = hasher(coordinate.x) ^ (hasher(coordinate.y) << 1);
+
+	// Calculate conflict group
+	size_t conflictFlags;
+	if (type == BeltType::Inserter || type == BeltType::Conveyor || type == BeltType::UndergroundEntrance || type == BeltType::UndergroundExit)
+	{
+		conflictFlags |= 0b001;
+	}
+
+	if (type == BeltType::Underground || type == BeltType::UndergroundEntrance || type == BeltType::UndergroundExit)
+	{
+		if (direction == Direction::N || direction == Direction::S)
+		{
+			conflictFlags |= 0b010;
+		}
+		else conflictFlags |= 0b100;
+	}
+
+	// Return final entry
+	return { coordinateHash, conflictFlags };
+}
+
+bool checkCATEntryConflict(const CATEntry& a, const CATEntry& b)
+{
+	bool coordMatch = a.coordinateHash == b.coordinateHash;
+	bool setOverlap = (a.conflictFlags & b.conflictFlags) != 0;
+	return coordMatch && setOverlap;
+}
+
+class ConflictAvoidanceTable
+{
+public:
+	ConflictAvoidanceTable() {}
+
+	ConflictAvoidanceTable(const ConflictAvoidanceTable& other)
+	{
+		std::cout << "Start copy" << std::endl;
+		for (const auto& coordinateEntry : other.table)
+		{
+			table[coordinateEntry.first] = std::vector<std::set<size_t>>();
+			for (const auto& conflictSet : coordinateEntry.second)
+			{
+				std::set<size_t> newConflictSet = conflictSet;
+				table[coordinateEntry.first].push_back(newConflictSet);
+			}
+		}
+		std::cout << "End copy" << std::endl;
+	}
+
+	void addPath(size_t pathIndex, const CATEntry& entry)
+	{
+		if (table.find(entry.coordinateHash) == table.end())
+		{
+			table[entry.coordinateHash] = std::vector<std::set<size_t>>();
+			table[entry.coordinateHash].push_back({});
+			table[entry.coordinateHash].push_back({});
+			table[entry.coordinateHash].push_back({});
+		}
+
+		if (entry.conflictFlags & 0b001) table[entry.coordinateHash][0].insert(pathIndex);
+		if (entry.conflictFlags & 0b010) table[entry.coordinateHash][1].insert(pathIndex);
+		if (entry.conflictFlags & 0b100) table[entry.coordinateHash][2].insert(pathIndex);
+	}
+
+	void removePath(size_t pathIndex)
+	{
+		for (auto& entry : table)
+		{
+			for (auto& conflictSet : entry.second)
+			{
+				conflictSet.erase(pathIndex);
+			}
+		}
+	}
+
+	bool checkConflict(const CATEntry& entry) const
+	{
+		auto found = table.find(entry.coordinateHash);
+		if (found == table.end()) return false;
+
+		const auto& conflictSets = found->second;
+		if (entry.conflictFlags & 0b001 && conflictSets[0].size() > 1) return true;
+		if (entry.conflictFlags & 0b010 && conflictSets[1].size() > 1) return true;
+		if (entry.conflictFlags & 0b100 && conflictSets[2].size() > 1) return true;
+		return false;
+	}
+
+	std::pair<CATEntry, std::set<size_t>> getConflictingPaths() const
+	{
+		for (const auto& entry : table)
+		{
+			const auto& conflictSets = entry.second;
+			if (conflictSets[0].size() > 1)
+			{
+				return { { entry.first, 0b001 }, conflictSets[0] };
+			}
+			if (conflictSets[1].size() > 1)
+			{
+				return { { entry.first, 0b010 }, conflictSets[1] };
+			}
+			if (conflictSets[2].size() > 1)
+			{
+				return { { entry.first, 0b100 }, conflictSets[2] };
+			}
+		}
+		return { { 0, 0 }, {} };
+	}
+
+private:
+	std::map<size_t, std::vector<std::set<size_t>>> table;
+};
+
+// ------------------------------------------------
+
+class PFState;
+
+struct PFGoal
+{
+public:
+	PFGoal() : isValid(false) {}
+
+	PFGoal(Coordinate coordinate, std::set<BeltType> types, std::set<Direction> directions)
+		: coordinate(coordinate), types(types), directions(directions), isValid(true)
+	{}
+
+	bool isValid = false;
 	Coordinate coordinate;
-	size_t conflictGroup;
+	std::set<BeltType> types;
+	std::set<Direction> directions;
 };
 
 class PFState : public pf::State<PFState>
 {
 public:
-	enum class BeltType { None, Inserter, Conveyor, UndergroundEntrance, Underground, UndergroundExit };
-
-public:
 	PFState(
-		const std::vector<std::vector<bool>>& blockedGrid, const std::vector<PFConstraint>& constraints, std::shared_ptr<PFState> goal,
+		const std::vector<std::vector<bool>>& blockedGrid, const std::vector<CATEntry>& constraints, PFGoal goal,
 		Coordinate coordinate, BeltType type, Direction direction,
 		std::shared_ptr<PFState> parent = nullptr)
 		: blockedGrid(blockedGrid), constraints(constraints), goal(goal),
 		coordinate(coordinate), type(type), direction(direction),
 		pf::State<PFState>(parent)
 	{
-		if (type == BeltType::Underground)
-		{
-			if (direction == Direction::N || direction == Direction::S) conflictGroup = 1;
-			else conflictGroup = 2;
-		}
-		else conflictGroup = 0;
+		// Calculate if above ground
+		aboveGround = type == BeltType::Conveyor || type == BeltType::UndergroundEntrance || type == BeltType::UndergroundExit;
+
+		// Calculate CAT entry
+		catEntry = calculateCATEntry(coordinate, type, direction);
 	}
 
 	bool operator==(PFState& other) const
@@ -186,14 +315,9 @@ public:
 		return coordinate.x == other.coordinate.x && coordinate.y == other.coordinate.y && type == other.type && direction == other.direction;
 	}
 
-	bool compareConstraint(const PFConstraint& other) const
+	CATEntry getCATEntry() const
 	{
-		return coordinate.x == other.coordinate.x && coordinate.y == other.coordinate.y && conflictGroup == other.conflictGroup;
-	}
-
-	PFConstraint getConstraint() const
-	{
-		return { coordinate, conflictGroup };
+		return catEntry;
 	}
 
 	float getFCost() override
@@ -220,17 +344,38 @@ public:
 		return neighbours;
 	}
 
-	std::shared_ptr<PFState> getGoal() const
+	bool isAboveGround() const
+	{
+		return aboveGround;
+	}
+
+	Coordinate getCoordinate() const
+	{
+		return coordinate;
+	}
+
+	PFGoal getGoal() const
 	{
 		return goal;
 	}
 
 	bool isGoal() override
 	{
-		// Loose requirements for goal when using None
-		bool coordMatch = coordinate.x == goal->coordinate.x && coordinate.y == goal->coordinate.y;
-		bool aboveGroundMatch = type != BeltType::Underground && type != BeltType::Inserter;
-		return coordMatch && aboveGroundMatch;
+		bool match = true;
+		match &= coordinate.x == goal.coordinate.x && coordinate.y == goal.coordinate.y;
+		if (goal.types.size() > 0) match &= goal.types.find(type) != goal.types.end();
+		if (goal.directions.size() > 0) match &= goal.directions.find(direction) != goal.directions.end();
+		return match;
+	}
+
+	bool conflictsWithConstraints() const
+	{
+		// Check if any entry in constraints conflicts with this state
+		for (const CATEntry& entry : constraints)
+		{
+			if (checkCATEntryConflict(entry, catEntry)) return true;
+		}
+		return false;
 	}
 
 	void print()
@@ -241,13 +386,14 @@ public:
 
 private:
 	const std::vector<std::vector<bool>>& blockedGrid;
-	const std::vector<PFConstraint>& constraints;
-	std::shared_ptr<PFState> goal;
+	const std::vector<CATEntry>& constraints;
+	PFGoal goal;
 
 	Coordinate coordinate;
 	BeltType type;
 	Direction direction;
-	size_t conflictGroup;
+	bool aboveGround;
+	CATEntry catEntry;
 
 	bool neighboursCalculated = false;
 	bool costCalculated = false;
@@ -268,7 +414,7 @@ private:
 			gCost = parent->gCost + coordDist;
 		}
 
-		hCost = pf::EuclideanDistance((float)coordinate.x, (float)coordinate.y, (float)goal->coordinate.x, (float)goal->coordinate.y);
+		hCost = pf::EuclideanDistance((float)coordinate.x, (float)coordinate.y, (float)goal.coordinate.x, (float)goal.coordinate.y);
 
 		costCalculated = true;
 	}
@@ -381,15 +527,7 @@ private:
 		}
 
 		// Filter neighbours in place based on constraints
-		neighbours.erase(std::remove_if(neighbours.begin(), neighbours.end(), [&](std::shared_ptr<PFState> state)
-		{
-			for (const PFConstraint& constraint : constraints)
-			{
-				if (state->compareConstraint(constraint)) return true;
-			}
-			return false;
-		}), neighbours.end());
-
+		neighbours.erase(std::remove_if(neighbours.begin(), neighbours.end(), [&](std::shared_ptr<PFState> state) { return state->conflictsWithConstraints(); }), neighbours.end());
 		neighboursCalculated = true;
 	}
 };
@@ -438,19 +576,22 @@ class CBPathfinder
 public:
 	struct CTNode
 	{
-		std::map<size_t, std::vector<PFConstraint>> pathConstraints{};
+		bool isValid = true;
 		std::vector<size_t> pathsToCalculate{};
 		std::map<size_t, pf::Path<PFState>> calculatedPaths{};
-		std::map<size_t, pf::Path<PFState>*> allPaths{};
-		bool isValid = true;
+
+		ConflictAvoidanceTable cat;
+		std::map<size_t, std::vector<CATEntry>> constraints{};
+		std::map<size_t, pf::Path<PFState>*> solution{};
 		float cost = 0.0f;
 	};
 
 	struct CTConflict
 	{
+		bool isConflict;
 		size_t pathA;
 		size_t pathB;
-		PFConstraint constraint;
+		CATEntry catEntry;
 	};
 
 	CBPathfinder(const std::vector<std::vector<bool>>& blockedGrid, const std::vector<ItemEndpoint>& itemEndpoints)
@@ -472,6 +613,7 @@ private:
 	size_t currentPathGroup = 0;
 	std::map<size_t, float> pathGroupSpareRates;
 	std::vector<PathConfig> pathConfigs;
+	CTNode finalSolution;
 	bool fitnessCalculated = false;
 	float fitness = 0.0f;
 
@@ -667,24 +809,26 @@ private:
 		std::vector<CTNode> nodes;
 		std::vector<CTNode*> openSet;
 
-		// Create root node with all paths calculated
+		// Create default empty root node
 		nodes.push_back({});
-		CTNode& root = nodes.back();
-		for (size_t i = 0; i < this->pathConfigs.size(); i++) root.pathsToCalculate.push_back(i);
-		calculateNode(root);
+		CTNode* root = &nodes.back();
+		root->isValid = true;
 
-		// Back out early if root is invalid
-		if (!root.isValid)
+		// Add all paths to calculate
+		for (size_t i = 0; i < this->pathConfigs.size(); i++) root->pathsToCalculate.push_back(i);
+
+		// Calculate and early exit if invalid
+		calculateNode(root);
+		if (!root->isValid)
 		{
 			fitness = 0.0f;
 			return;
 		}
 
-		openSet.push_back(&root);
+		openSet.push_back(root);
 
 		// While there are nodes to process
 		bool foundSolution = false;
-		CTNode* solution = nullptr;
 		while (openSet.size() > 0)
 		{
 			// Pop the node with the lowest cost
@@ -695,14 +839,14 @@ private:
 			}
 			openSet.erase(std::remove(openSet.begin(), openSet.end(), current), openSet.end());
 
-			// Validate and find constraints
-			CTConflict conflict = findConflict(*current);
+			// Validate to find conflicts
+			CTConflict conflict = findConflict(current);
 
 			// If no conflict, have found a solution
-			if (conflict.pathA == -1)
+			if (!conflict.isConflict)
 			{
 				foundSolution = true;
-				solution = current;
+				this->finalSolution = std::move(*current);
 				break;
 			}
 
@@ -710,17 +854,28 @@ private:
 			for (size_t pathIndex : { conflict.pathA, conflict.pathB })
 			{
 				nodes.push_back({});
-				CTNode& newNode = nodes.back();
-				newNode.pathConstraints = current->pathConstraints;
-				newNode.pathConstraints[pathIndex].push_back(conflict.constraint);
-				newNode.pathsToCalculate.push_back(pathIndex);
-				newNode.allPaths = current->allPaths;
-				calculateNode(newNode);
+				CTNode* newNode = &nodes.back();
 
-				// Only add to open set if valid
-				if (newNode.isValid)
+				// Initialize node
+				newNode->isValid = true;
+				newNode->pathsToCalculate = { pathIndex };
+				newNode->cat = current->cat;
+				newNode->constraints = {};
+				for (const auto& entry : current->constraints)
 				{
-					openSet.push_back(&newNode);
+					newNode->constraints[entry.first] = entry.second;
+				}
+				newNode->solution = current->solution;
+				newNode->cost = current->cost;
+
+				// Add in the conflict
+				newNode->constraints[pathIndex].push_back(conflict.catEntry);
+
+				// Validate and add to open set if valid
+				calculateNode(newNode);
+				if (newNode->isValid)
+				{
+					openSet.push_back(newNode);
 				}
 			}
 		}
@@ -732,25 +887,182 @@ private:
 			return;
 		}
 
-		// Solution found, calculate fitness
+		// Solution found so update fitness
 		fitness = 0.0f;
 		for (size_t i = 0; i < this->pathConfigs.size(); i++)
 		{
-			if (!solution->allPaths[i]->found) continue;
-			float shortest = solution->allPaths[i]->nodes[0]->getHCost();
-			float real = solution->allPaths[i]->cost;
+			if (!this->finalSolution.solution[i]->found) continue;
+			float shortest = this->finalSolution.solution[i]->nodes[0]->getHCost();
+			float real = this->finalSolution.solution[i]->cost;
 			fitness += 1.0f + shortest / real;
 		}
 	}
 
-	pf::Path<PFState> calculateNode(CTNode& node)
+	void calculateNode(CTNode* node)
 	{
-		return {};
+		// Exit early if no paths to calculate
+		if (node->pathsToCalculate.size() == 0) return;
+		node->isValid = false;
+
+		// Ensure all dependant paths are calculated in the right order
+		std::vector<size_t> calculateOrder{};
+		while (node->pathsToCalculate.size() > 0)
+		{
+			size_t pathIndex = node->pathsToCalculate.back();
+			node->pathsToCalculate.pop_back();
+
+			// If already in order, move to end
+			auto found = std::find(calculateOrder.begin(), calculateOrder.end(), pathIndex);
+			if (found != calculateOrder.end()) calculateOrder.erase(found);
+			calculateOrder.push_back(pathIndex);
+
+			// Add all dependant paths in the queue
+			for (size_t dependantPathIndex : pathConfigs[pathIndex].dependantPaths)
+			{
+				node->pathsToCalculate.push_back(dependantPathIndex);
+			}
+		}
+
+		// Remove all paths from the CAT
+		for (size_t pathIndex : node->pathsToCalculate)
+		{
+			node->cat.removePath(pathIndex);
+		}
+
+		// Calculate each path
+		for (size_t pathIndex : calculateOrder)
+		{
+			const PathConfig& path = this->pathConfigs[pathIndex];
+
+			// Resolve source and destination
+			auto source = resolvePathConfig(node, pathIndex);
+			if (source == nullptr) return;
+
+			// Perform pathfinding
+			node->calculatedPaths[pathIndex] = pf::asPathfinding<PFState>(source, true);
+			node->solution[pathIndex] = &node->calculatedPaths[pathIndex];
+
+			// Add path to CAT
+			for (const auto& state : node->calculatedPaths[pathIndex].nodes)
+			{
+				node->cat.addPath(pathIndex, state->getCATEntry());
+			}
+		}
+
+		// Node is valid so sum individual path costs
+		node->isValid = true;
+		node->cost = 0.0f;
+		for (const auto path : node->solution)
+		{
+			node->cost += path.second->cost;
+		}
 	}
 
-	CTConflict findConflict(CTNode& node)
+	std::shared_ptr<PFState> resolvePathConfig(CTNode* node, size_t pathIndex)
 	{
-		return {};
+		const PathConfig& path = this->pathConfigs[pathIndex];
+
+		// Position of destination -> goal, resolve closest source path edge -> PFState
+		if (path.source.type == ConcreteEndpoint::Type::PATH)
+		{
+			const pf::Path<PFState>& sourcePath = *(node->solution[path.source.index]);
+			const ItemEndpoint& destinationEndpoint = this->itemEndpoints[path.destination.index];
+
+			auto best = resolveBestPathEdge(node, sourcePath, destinationEndpoint.coordinate, true);
+			if (best.first.x == -1) return nullptr;
+
+			PFGoal goal{ destinationEndpoint.coordinate, { BeltType::Conveyor, BeltType::UndergroundEntrance, BeltType::UndergroundExit }, {} };
+			return std::make_shared<PFState>(blockedGrid, node->constraints[pathIndex], goal, best.first, BeltType::Inserter, best.second);
+		}
+
+		// Position of source -> PFState, resolve closest destination path edge -> goal
+		if (path.destination.type == ConcreteEndpoint::Type::PATH)
+		{
+			const ItemEndpoint& sourceEndpoint = this->itemEndpoints[path.source.index];
+			const pf::Path<PFState>& destinationPath = *node->solution[path.destination.index];
+
+			auto best = resolveBestPathEdge(node, destinationPath, sourceEndpoint.coordinate, false);
+			if (best.first.x == -1) return nullptr;
+
+			PFGoal goal{ best.first, { BeltType::Conveyor, BeltType::UndergroundEntrance, BeltType::UndergroundExit }, { dirOpposite(best.second) } };
+			return std::make_shared<PFState>(blockedGrid, node->constraints[pathIndex], goal, sourceEndpoint.coordinate, BeltType::None, Direction::N);
+		}
+
+		// Position of source -> PFState, position of destination -> goal
+		const ItemEndpoint& sourceEndpoint = this->itemEndpoints[path.source.index];
+		const ItemEndpoint& destinationEndpoint = this->itemEndpoints[path.destination.index];
+
+		PFGoal goal{ destinationEndpoint.coordinate, { BeltType::Conveyor, BeltType::UndergroundEntrance, BeltType::UndergroundExit}, {} };
+		return std::make_shared<PFState>(blockedGrid, node->constraints[pathIndex], goal, sourceEndpoint.coordinate, BeltType::None, Direction::N);
+	}
+
+	std::pair<Coordinate, Direction> resolveBestPathEdge(const CTNode* node, const pf::Path<PFState>& path, Coordinate target, bool needExtraSpace = false)
+	{
+		// Look for the closest edge of the path to the target
+		float bestDistance = std::numeric_limits<float>::max();
+		Coordinate bestCoord = { -1, -1 };
+		Direction bestDir = Direction::N;
+
+		// For each above ground node in the path, check the 4 directions
+		for (size_t i = 0; i < path.nodes.size(); i++)
+		{
+			const auto& pfNode = path.nodes[i];
+			if (pfNode->isAboveGround())
+			{
+				Coordinate coord = pfNode->getCoordinate();
+				for (int j = 0; j < 4; j++)
+				{
+					Direction dir = static_cast<Direction>(j);
+					Coordinate offset = dirOffset(dir);
+					Coordinate newCoord = { coord.x + offset.x, coord.y + offset.y };
+					CATEntry catEntry = calculateCATEntry(newCoord, BeltType::Conveyor, dir);
+
+					// Only if not blocked, constrained, or have conflicting CAT entries
+					if (newCoord.x < 0 || newCoord.x >= blockedGrid.size() || newCoord.y < 0 || newCoord.y >= blockedGrid[0].size()) continue;
+					if (blockedGrid[newCoord.x][newCoord.y]) continue;
+					if (node->cat.checkConflict(catEntry)) continue;
+
+					// If need extra space, check the extra space is also valid
+					if (needExtraSpace)
+					{
+						Coordinate extraCoord = { newCoord.x + offset.x, newCoord.y + offset.y };
+						CATEntry extraCatEntry = calculateCATEntry(extraCoord, BeltType::Conveyor, dir);
+
+						if (extraCoord.x < 0 || extraCoord.x >= blockedGrid.size() || extraCoord.y < 0 || extraCoord.y >= blockedGrid[0].size()) continue;
+						if (blockedGrid[extraCoord.x][extraCoord.y]) continue;
+						if (node->cat.checkConflict(extraCatEntry)) continue;
+					}
+
+					// Check distance to target
+					float distance = pf::EuclideanDistance((float)newCoord.x, (float)newCoord.y, (float)target.x, (float)target.y);
+					if (distance < bestDistance)
+					{
+						bestDistance = distance;
+						bestCoord = newCoord;
+						bestDir = dir;
+					}
+				}
+			}
+		}
+
+		return { bestCoord, bestDir };
+	}
+
+	CTConflict findConflict(CTNode* node)
+	{
+		auto conflict = node->cat.getConflictingPaths();
+		const CATEntry& catEntry = conflict.first;
+		const auto& conflictingPaths = conflict.second;
+
+		// No conflicting paths
+		if (conflictingPaths.size() == 0) return { false };
+		assert(conflictingPaths.size() >= 2);
+
+		// Grab first 2 conflicting paths and return
+		auto it = conflictingPaths.begin();
+		size_t pathA = *it;
+		size_t pathB = *(++it);
+		return { true, pathA, pathB, catEntry };
 	}
 };
 
@@ -1405,16 +1717,16 @@ void solveExampleProblem1()
 
 void checkPathfinding()
 {
-	// Mock example pathfinding problem grid
+	// Initialize pathfinding world, constraints, and goal
 	const std::vector<std::vector<bool>> blockedGrid = {
 		{ false, false, true, true, false, false, false },
 		{ false, false, true, true, false, false, false },
 		{ false, false, false, false, false, true, false } };
+	std::vector<CATEntry> constraints{};
+	PFGoal goal{ Coordinate{ 2, 6 }, {}, {} };
 
-	// Perform pathfinding
-	std::vector<PFConstraint> constraints{};
-	std::shared_ptr<PFState> goalState = std::make_shared<PFState>(blockedGrid, constraints, nullptr, Coordinate{ 2, 6 }, PFState::BeltType::None, Direction::E);
-	std::shared_ptr<PFState> initialState = std::make_shared<PFState>(blockedGrid, constraints, goalState, Coordinate{ 0, 0 }, PFState::BeltType::None, Direction::E);
+	// Make initial state and perform pathfinding
+	std::shared_ptr<PFState> initialState = std::make_shared<PFState>(blockedGrid, constraints, goal, Coordinate{ 0, 0 }, BeltType::None, Direction::E);
 	pf::Path<PFState> path = pf::asPathfinding(initialState, true);
 
 	// Print path
