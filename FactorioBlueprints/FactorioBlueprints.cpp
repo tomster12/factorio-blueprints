@@ -806,15 +806,13 @@ private:
 		std::cout << std::endl;
 		#endif
 
-		std::vector<CTNode> nodes;
-		std::vector<CTNode*> openSet;
+		std::vector<std::shared_ptr<CTNode>> nodes;
+		std::vector<std::shared_ptr<CTNode>> openSet;
 
-		// Create default empty root node
-		nodes.push_back({});
-		CTNode* root = &nodes.back();
+		// Create default empty root node with all paths to calculate
+		nodes.push_back(std::make_shared<CTNode>());
+		auto root = nodes.back();
 		root->isValid = true;
-
-		// Add all paths to calculate
 		for (size_t i = 0; i < this->pathConfigs.size(); i++) root->pathsToCalculate.push_back(i);
 
 		// Calculate and early exit if invalid
@@ -832,12 +830,23 @@ private:
 		while (openSet.size() > 0)
 		{
 			// Pop the node with the lowest cost
-			CTNode* current = openSet[0];
-			for (CTNode* node : openSet)
+			auto current = openSet[0];
+			for (auto node : openSet)
 			{
 				if (node->cost < current->cost) current = node;
 			}
 			openSet.erase(std::remove(openSet.begin(), openSet.end(), current), openSet.end());
+
+			#ifdef LOG
+			// TODO: Matching conflicts seem to just be infinitely going up
+			std::cout << "Open set size: " << openSet.size() << ", current cost: " << current->cost << std::endl;
+			std::cout << "Constraints: ( ";
+			for (const auto& entry : current->constraints)
+			{
+				std::cout << entry.second.size() << " ";
+			}
+			std::cout << ")" << std::endl;
+			#endif
 
 			// Validate to find conflicts
 			CTConflict conflict = findConflict(current);
@@ -853,8 +862,8 @@ private:
 			// Create new nodes for each conflicting path
 			for (size_t pathIndex : { conflict.pathA, conflict.pathB })
 			{
-				nodes.push_back({});
-				CTNode* newNode = &nodes.back();
+				nodes.push_back(std::make_shared<CTNode>());
+				auto newNode = nodes.back();
 
 				// Initialize node
 				newNode->isValid = true;
@@ -898,7 +907,7 @@ private:
 		}
 	}
 
-	void calculateNode(CTNode* node)
+	void calculateNode(std::shared_ptr<CTNode> node)
 	{
 		// Exit early if no paths to calculate
 		if (node->pathsToCalculate.size() == 0) return;
@@ -958,7 +967,7 @@ private:
 		}
 	}
 
-	std::shared_ptr<PFState> resolvePathConfig(CTNode* node, size_t pathIndex)
+	std::shared_ptr<PFState> resolvePathConfig(std::shared_ptr<CTNode> node, size_t pathIndex)
 	{
 		const PathConfig& path = this->pathConfigs[pathIndex];
 
@@ -996,7 +1005,7 @@ private:
 		return std::make_shared<PFState>(blockedGrid, node->constraints[pathIndex], goal, sourceEndpoint.coordinate, BeltType::None, Direction::N);
 	}
 
-	std::pair<Coordinate, Direction> resolveBestPathEdge(const CTNode* node, const pf::Path<PFState>& path, Coordinate target, bool needExtraSpace = false)
+	std::pair<Coordinate, Direction> resolveBestPathEdge(const std::shared_ptr<CTNode> node, const pf::Path<PFState>& path, Coordinate target, bool needExtraSpace = false)
 	{
 		// Look for the closest edge of the path to the target
 		float bestDistance = std::numeric_limits<float>::max();
@@ -1048,7 +1057,7 @@ private:
 		return { bestCoord, bestDir };
 	}
 
-	CTConflict findConflict(CTNode* node)
+	CTConflict findConflict(std::shared_ptr<CTNode> node)
 	{
 		auto conflict = node->cat.getConflictingPaths();
 		const CATEntry& catEntry = conflict.first;
