@@ -1,4 +1,5 @@
-#define LOG
+#define LOG1
+// #define LOG2
 #define NOMINMAX
 
 #include <windows.h>
@@ -164,7 +165,7 @@ CATEntry calculateCATEntry(Coordinate coordinate, BeltType type, Direction direc
 	size_t coordinateHash = hasher(coordinate.x) ^ (hasher(coordinate.y) << 1);
 
 	// Calculate conflict group
-	size_t conflictFlags;
+	size_t conflictFlags = 0;
 	if (type == BeltType::Inserter || type == BeltType::Conveyor || type == BeltType::UndergroundEntrance || type == BeltType::UndergroundExit)
 	{
 		conflictFlags |= 0b001;
@@ -527,6 +528,7 @@ private:
 		}
 
 		// Filter neighbours in place based on constraints
+		// TODO: CatEntry collision with the initial position
 		neighbours.erase(std::remove_if(neighbours.begin(), neighbours.end(), [&](std::shared_ptr<PFState> state) { return state->conflictsWithConstraints(); }), neighbours.end());
 		neighboursCalculated = true;
 	}
@@ -628,8 +630,9 @@ private:
 	{
 		pathConfigs = std::vector<PathConfig>();
 
-		#ifdef LOG
+		#ifdef LOG2
 		// Print out path ends
+		std::cout << "--- CB Item Endpoints ---" << std::endl << std::endl;
 		for (size_t i = 0; i < this->itemEndpoints.size(); i++)
 		{
 			const ItemEndpoint& endpoint = this->itemEndpoints[i];
@@ -639,6 +642,7 @@ private:
 				<< " @ " << endpoint.rate << "/s" << std::endl;
 		}
 		std::cout << std::endl;
+		std::cout << "--- CB Endpoint Processing ---" << std::endl << std::endl;
 		#endif
 
 		// Seperate end points by item
@@ -738,7 +742,7 @@ private:
 					endpoints.erase(std::remove(endpoints.begin(), endpoints.end(), bestEndpoint.index), endpoints.end());
 				}
 
-				#ifdef LOG
+				#ifdef LOG2
 				// Log picked choices
 				std::cout << "Current: index " << currentIndex << ", item " << current.item << " at (" << current.coordinate.x << ", " << current.coordinate.y << ") "
 					<< (current.isSource ? "source" : "destination") << " @ " << current.rate << "/s" << std::endl;
@@ -764,12 +768,10 @@ private:
 				this->pathGroupSpareRates[pathGroup] = bestSpareRate;
 			}
 		}
-	}
 
-	void performPathfinding()
-	{
-		#ifdef LOG
+		#ifdef LOG2
 		// Print out paths
+		std::cout << "--- Final Path configs ---" << std::endl << std::endl;
 		for (size_t i = 0; i < this->pathConfigs.size(); i++)
 		{
 			const PathConfig& path = this->pathConfigs[i];
@@ -805,9 +807,20 @@ private:
 		}
 		std::cout << std::endl;
 		#endif
+	}
+
+	void performPathfinding()
+	{
+		#ifdef LOG2
+		std::cout << "--- CB Pathfinding ---" << std::endl << std::endl;
+		#endif
 
 		std::vector<std::shared_ptr<CTNode>> nodes;
 		std::vector<std::shared_ptr<CTNode>> openSet;
+
+		// A CTNode will be invalid if a path config cannot be resolved
+		// The openSet will eventually be empty if all the CTNodes end up invalid
+		// It is possible for a solution with no conflicts, but some paths not found
 
 		// Create default empty root node with all paths to calculate
 		nodes.push_back(std::make_shared<CTNode>());
@@ -829,7 +842,7 @@ private:
 		bool foundSolution = false;
 		while (openSet.size() > 0)
 		{
-			// Pop the node with the lowest cost
+			// Pop the node with the lowest sum of path costs
 			auto current = openSet[0];
 			for (auto node : openSet)
 			{
@@ -837,10 +850,9 @@ private:
 			}
 			openSet.erase(std::remove(openSet.begin(), openSet.end(), current), openSet.end());
 
-			#ifdef LOG
+			#ifdef LOG2
 			// TODO: Matching conflicts seem to just be infinitely going up
-			std::cout << "Open set size: " << openSet.size() << ", current cost: " << current->cost << std::endl;
-			std::cout << "Constraints: ( ";
+			std::cout << "Open set: " << openSet.size() << ", cost: " << current->cost << ", Constraints: ( ";
 			for (const auto& entry : current->constraints)
 			{
 				std::cout << entry.second.size() << " ";
@@ -863,7 +875,7 @@ private:
 			for (size_t pathIndex : { conflict.pathA, conflict.pathB })
 			{
 				nodes.push_back(std::make_shared<CTNode>());
-				auto newNode = nodes.back();
+				auto& newNode = nodes.back();
 
 				// Initialize node
 				newNode->isValid = true;
@@ -889,22 +901,41 @@ private:
 			}
 		}
 
-		// No solution found
+		// No solution without conflicts found, fitness = 0
 		if (!foundSolution)
 		{
+			#ifdef LOG2
+			std::cout << std::endl << "No solution found" << std::endl << std::endl;
+			#endif
 			fitness = 0.0f;
 			return;
 		}
 
-		// Solution found so update fitness
+		// Solution found, fitness = sum (1 + shortest / real)
+		#ifdef LOG2
+		std::cout << std::endl << "Solution found" << std::endl << std::endl;
+		#endif
 		fitness = 0.0f;
 		for (size_t i = 0; i < this->pathConfigs.size(); i++)
 		{
-			if (!this->finalSolution.solution[i]->found) continue;
+			if (!this->finalSolution.solution[i]->found)
+			{
+				#ifdef LOG2
+				std::cout << "Path " << i << " in the solution, could not found" << std::endl;
+				#endif
+				continue;
+			}
 			float shortest = this->finalSolution.solution[i]->nodes[0]->getHCost();
 			float real = this->finalSolution.solution[i]->cost;
-			fitness += 1.0f + shortest / real;
+			if (shortest == 0) fitness += 2.0f;
+			else fitness += (1.0f + shortest / real);
+			#ifdef LOG2
+			std::cout << "Path " << i << " in the solution, shortest " << shortest << ", real " << real << ", fitness " << (1.0f + shortest / real) << std::endl;
+			#endif
 		}
+		#ifdef LOG2
+		std::cout << std::endl;
+		#endif
 	}
 
 	void calculateNode(std::shared_ptr<CTNode> node)
@@ -933,7 +964,7 @@ private:
 		}
 
 		// Remove all paths from the CAT
-		for (size_t pathIndex : node->pathsToCalculate)
+		for (size_t pathIndex : calculateOrder)
 		{
 			node->cat.removePath(pathIndex);
 		}
@@ -967,33 +998,46 @@ private:
 		}
 	}
 
-	std::shared_ptr<PFState> resolvePathConfig(std::shared_ptr<CTNode> node, size_t pathIndex)
+	std::shared_ptr<PFState> resolvePathConfig(const std::shared_ptr<CTNode> node, size_t pathIndex)
 	{
+		// TODO: When checking a source or destination need to ensure it doesnt conflict with the CAT or the constraints of the path
+
+		// Attempt to resolve the path considering the given node
+		// Return nullptr is conflicts prevent resolution
 		const PathConfig& path = this->pathConfigs[pathIndex];
+		const auto& constraints = node->constraints[pathIndex];
 
 		// Position of destination -> goal, resolve closest source path edge -> PFState
 		if (path.source.type == ConcreteEndpoint::Type::PATH)
 		{
-			const pf::Path<PFState>& sourcePath = *(node->solution[path.source.index]);
 			const ItemEndpoint& destinationEndpoint = this->itemEndpoints[path.destination.index];
 
-			auto best = resolveBestPathEdge(node, sourcePath, destinationEndpoint.coordinate, true);
-			if (best.first.x == -1) return nullptr;
+			const auto destinationCATEntry = calculateCATEntry(destinationEndpoint.coordinate, BeltType::Conveyor, Direction::N);
+			if (std::any_of(constraints.begin(), constraints.end(), [&](const CATEntry& entry) { return checkCATEntryConflict(entry, destinationCATEntry); })) return nullptr;
+			if (node->cat.checkConflict(destinationCATEntry)) return nullptr;
+
+			const pf::Path<PFState>& sourcePath = *(node->solution[path.source.index]);
+			auto best = resolveBestPathEdge(node, sourcePath, destinationEndpoint.coordinate, constraints, true);
+			if (std::get<0>(best) == false) return nullptr;
 
 			PFGoal goal{ destinationEndpoint.coordinate, { BeltType::Conveyor, BeltType::UndergroundEntrance, BeltType::UndergroundExit }, {} };
-			return std::make_shared<PFState>(blockedGrid, node->constraints[pathIndex], goal, best.first, BeltType::Inserter, best.second);
+			return std::make_shared<PFState>(blockedGrid, node->constraints[pathIndex], goal, std::get<1>(best), BeltType::Inserter, std::get<2>(best));
 		}
 
 		// Position of source -> PFState, resolve closest destination path edge -> goal
 		if (path.destination.type == ConcreteEndpoint::Type::PATH)
 		{
 			const ItemEndpoint& sourceEndpoint = this->itemEndpoints[path.source.index];
+
+			const auto sourceCATEntry = calculateCATEntry(sourceEndpoint.coordinate, BeltType::Conveyor, Direction::N);
+			if (std::any_of(constraints.begin(), constraints.end(), [&](const CATEntry& entry) { return checkCATEntryConflict(entry, sourceCATEntry); })) return nullptr;
+			if (node->cat.checkConflict(sourceCATEntry)) return nullptr;
+
 			const pf::Path<PFState>& destinationPath = *node->solution[path.destination.index];
+			auto best = resolveBestPathEdge(node, destinationPath, sourceEndpoint.coordinate, constraints, false);
+			if (std::get<0>(best) == false) return nullptr;
 
-			auto best = resolveBestPathEdge(node, destinationPath, sourceEndpoint.coordinate, false);
-			if (best.first.x == -1) return nullptr;
-
-			PFGoal goal{ best.first, { BeltType::Conveyor, BeltType::UndergroundEntrance, BeltType::UndergroundExit }, { dirOpposite(best.second) } };
+			PFGoal goal{ std::get<1>(best), { BeltType::Conveyor, BeltType::UndergroundEntrance, BeltType::UndergroundExit }, { dirOpposite(std::get<2>(best)) } };
 			return std::make_shared<PFState>(blockedGrid, node->constraints[pathIndex], goal, sourceEndpoint.coordinate, BeltType::None, Direction::N);
 		}
 
@@ -1001,16 +1045,22 @@ private:
 		const ItemEndpoint& sourceEndpoint = this->itemEndpoints[path.source.index];
 		const ItemEndpoint& destinationEndpoint = this->itemEndpoints[path.destination.index];
 
+		const auto sourceCATEntry = calculateCATEntry(sourceEndpoint.coordinate, BeltType::Conveyor, Direction::N);
+		const auto destinationCATEntry = calculateCATEntry(destinationEndpoint.coordinate, BeltType::Conveyor, Direction::N);
+		if (std::any_of(constraints.begin(), constraints.end(), [&](const CATEntry& entry) { return checkCATEntryConflict(entry, sourceCATEntry) || checkCATEntryConflict(entry, destinationCATEntry); })) return nullptr;
+		if (node->cat.checkConflict(sourceCATEntry) || node->cat.checkConflict(destinationCATEntry)) return nullptr;
+
 		PFGoal goal{ destinationEndpoint.coordinate, { BeltType::Conveyor, BeltType::UndergroundEntrance, BeltType::UndergroundExit}, {} };
 		return std::make_shared<PFState>(blockedGrid, node->constraints[pathIndex], goal, sourceEndpoint.coordinate, BeltType::None, Direction::N);
 	}
 
-	std::pair<Coordinate, Direction> resolveBestPathEdge(const std::shared_ptr<CTNode> node, const pf::Path<PFState>& path, Coordinate target, bool needExtraSpace = false)
+	std::tuple<bool, Coordinate, Direction> resolveBestPathEdge(const std::shared_ptr<CTNode> node, const pf::Path<PFState>& path, const Coordinate target, const std::vector<CATEntry>& constraints, bool needExtraSpace = false)
 	{
 		// Look for the closest edge of the path to the target
 		float bestDistance = std::numeric_limits<float>::max();
 		Coordinate bestCoord = { -1, -1 };
 		Direction bestDir = Direction::N;
+		bool found = false;
 
 		// For each above ground node in the path, check the 4 directions
 		for (size_t i = 0; i < path.nodes.size(); i++)
@@ -1030,6 +1080,7 @@ private:
 					if (newCoord.x < 0 || newCoord.x >= blockedGrid.size() || newCoord.y < 0 || newCoord.y >= blockedGrid[0].size()) continue;
 					if (blockedGrid[newCoord.x][newCoord.y]) continue;
 					if (node->cat.checkConflict(catEntry)) continue;
+					if (std::any_of(constraints.begin(), constraints.end(), [&](const CATEntry& entry) { return checkCATEntryConflict(entry, catEntry); })) continue;
 
 					// If need extra space, check the extra space is also valid
 					if (needExtraSpace)
@@ -1040,6 +1091,7 @@ private:
 						if (extraCoord.x < 0 || extraCoord.x >= blockedGrid.size() || extraCoord.y < 0 || extraCoord.y >= blockedGrid[0].size()) continue;
 						if (blockedGrid[extraCoord.x][extraCoord.y]) continue;
 						if (node->cat.checkConflict(extraCatEntry)) continue;
+						if (std::any_of(constraints.begin(), constraints.end(), [&](const CATEntry& entry) { return checkCATEntryConflict(entry, extraCatEntry); })) continue;
 					}
 
 					// Check distance to target
@@ -1049,12 +1101,13 @@ private:
 						bestDistance = distance;
 						bestCoord = newCoord;
 						bestDir = dir;
+						found = true;
 					}
 				}
 			}
 		}
 
-		return { bestCoord, bestDir };
+		return { found, bestCoord, bestDir };
 	}
 
 	CTConflict findConflict(std::shared_ptr<CTNode> node)
@@ -1229,6 +1282,8 @@ public:
 	{
 		calculateWorld();
 
+		std::cout << "-- Local State World --" << std::endl << std::endl;
+
 		HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 
 		for (int y = 0; y < problem.blueprintHeight; y++)
@@ -1258,6 +1313,7 @@ public:
 		SetConsoleTextAttribute(hConsole, 15);
 		std::cout << std::endl;
 
+		std::cout << "-- Local State Data --" << std::endl << std::endl;
 		for (const auto& assembler : assemblers)
 		{
 			std::cout << "Assembler: item " << assembler.item
@@ -1430,7 +1486,7 @@ private:
 	// Run each solve stage sequentially
 	void solve()
 	{
-		#ifdef LOG
+		#ifdef LOG1
 		std::cout << "Solving..." << std::endl << std::endl;
 		#endif
 
@@ -1451,7 +1507,7 @@ private:
 			float rate;
 		};
 
-		#ifdef LOG
+		#ifdef LOG1
 		std::cout
 			<< "Stage: unravelRecipes()" << std::endl
 			<< "=========================" << std::endl
@@ -1535,7 +1591,7 @@ private:
 			}
 		}
 
-		#ifdef LOG
+		#ifdef LOG1
 		std::cout << "Solver Items: " << std::endl;
 		for (const auto& entry : baseItemInfos)
 		{
@@ -1555,7 +1611,7 @@ private:
 	// Return maximum run config
 	void calculateRunConfigs()
 	{
-		#ifdef LOG
+		#ifdef LOG1
 		std::cout
 			<< "Stage: calculateRunConfigs()" << std::endl
 			<< "=============================" << std::endl
@@ -1616,7 +1672,7 @@ private:
 			possibleRunConfigs[i] = runConfig;
 		}
 
-		#ifdef LOG
+		#ifdef LOG1
 		for (int i = maxSupportedCeil; i > 0; i--)
 		{
 			const auto& runConfig = possibleRunConfigs[i];
@@ -1659,7 +1715,7 @@ private:
 				}
 			}
 
-			#ifdef LOG
+			#ifdef LOG1
 			std::cout << "Run config " << i << " required space: " << requiredSpace << " / " << availableSpace << std::endl;
 			#endif
 
@@ -1671,7 +1727,7 @@ private:
 			}
 		}
 
-		#ifdef LOG
+		#ifdef LOG1
 		std::cout << "Found best run config: " << bestRunConfig << std::endl << std::endl;
 		#endif
 	}
@@ -1682,7 +1738,7 @@ private:
 	// Bottom level A* to find paths
 	void performSearch()
 	{
-		#ifdef LOG
+		#ifdef LOG1
 		std::cout
 			<< "Stage: performSearch()" << std::endl
 			<< "=======================" << std::endl
@@ -1696,7 +1752,7 @@ private:
 			std::shared_ptr<LSState> initialState = LSState::createRandom(problem, runConfig);
 			std::shared_ptr<LSState> finalState = ls::simulatedAnnealing(initialState, 2.0f, 0.004f, 1000);
 
-			#ifdef LOG
+			#ifdef LOG1
 			std::cout << "Run config " << i << " final state fitness: " << finalState->getFitness() << std::endl << std::endl;
 			finalState->print();
 			#endif
