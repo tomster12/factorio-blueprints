@@ -13,6 +13,8 @@ namespace pf
 	class State
 	{
 	public:
+		static size_t evaluationCount;
+
 		virtual bool operator==(T& other) const = 0;
 		virtual float getFCost() = 0;
 		virtual float getGCost() = 0;
@@ -38,11 +40,13 @@ namespace pf
 	Path<T> asPathfinding(std::shared_ptr<T> start, bool toLog = false)
 	{
 		static_assert(std::is_base_of<State<T>, T>::value, "T must be a subclass of State<T>.");
+		T::evaluationCount++;
 
 		// Start open set with start node
-		std::set<std::shared_ptr<T>> closedSet;
-		std::set<std::shared_ptr<T>> openSet;
-		openSet.insert(start);
+		// Changed from std::set to std::vector to ensure deterministic outcome
+		std::vector<std::shared_ptr<T>> closedSet;//std::set<std::shared_ptr<T>> closedSet;
+		std::vector<std::shared_ptr<T>> openSet;//std::set<std::shared_ptr<T>> openSet;
+		openSet.push_back(start);//openSet.insert(start);
 
 		// Until open set is empty
 		while (!openSet.empty())
@@ -75,8 +79,8 @@ namespace pf
 				return { true, path, cost };
 			}
 
-			openSet.erase(current);
-			closedSet.insert(current);
+			openSet.erase(std::remove(openSet.begin(), openSet.end(), current), openSet.end());//openSet.erase(current);
+			closedSet.push_back(current);//closedSet.insert(current);
 
 			// Add neighbors to open if not in open or closed set
 			for (std::shared_ptr<T> neighbor : current->getNeighbours())
@@ -87,7 +91,7 @@ namespace pf
 				}
 				if (std::find_if(openSet.begin(), openSet.end(), [&neighbor](const std::shared_ptr<T>& node) { return *node == *neighbor; }) == openSet.end())
 				{
-					openSet.insert(neighbor);
+					openSet.push_back(neighbor);//openSet.insert(neighbor);
 				}
 			}
 		}

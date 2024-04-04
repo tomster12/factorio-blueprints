@@ -382,7 +382,7 @@ public:
 	void print()
 	{
 		std::string typeStr = type == BeltType::None ? "None" : type == BeltType::Conveyor ? "Conveyor" : type == BeltType::UndergroundEntrance ? "UndergroundEntrance" : type == BeltType::Underground ? "Underground" : "UndergroundExit";
-		std::cout << "State: (" << coordinate.x << ", " << coordinate.y << "), belt type: " << typeStr << ", direction: " << dirString(direction) << std::endl;
+		std::cout << "[ (" << coordinate.x << ", " << coordinate.y << ") " << dirString(direction) << " | " << typeStr << " ]" << std::endl;
 	}
 
 private:
@@ -411,7 +411,6 @@ private:
 		{
 			float coordDist = pf::EuclideanDistance((float)coordinate.x, (float)coordinate.y, (float)parent->coordinate.x, (float)parent->coordinate.y);
 			if ((type == BeltType::Underground) || (parent->type == BeltType::Underground)) coordDist *= 0.5f;
-			if (parent->type == BeltType::Inserter) coordDist = 0.0f;
 			gCost = parent->gCost + coordDist;
 		}
 
@@ -576,6 +575,8 @@ struct PathConfig
 class CBPathfinder
 {
 public:
+	static size_t evaluationCount;
+
 	struct CTNode
 	{
 		bool isValid = true;
@@ -603,9 +604,65 @@ public:
 	float getFitness()
 	{
 		if (fitnessCalculated) return fitness;
+		CBPathfinder::evaluationCount++;
+
 		solve();
+
 		fitnessCalculated = true;
 		return fitness;
+	}
+
+	void print()
+	{
+		std::cout << "--- CB Pathfinding ---" << std::endl << std::endl;
+
+		if (!finalSolutionFound)
+		{
+			std::cout << "No solution found" << std::endl;
+			return;
+		}
+
+		std::cout << "Solution found, fitness: " << fitness << std::endl << std::endl;
+
+		std::cout << "Constraints: ( ";
+		for (const auto& entry : finalSolution->constraints)
+		{
+			std::cout << entry.second.size() << " ";
+		}
+		std::cout << ")" << std::endl;
+
+		auto printEndpoint = [&](const ConcreteEndpoint& endpoint)
+		{
+			if (endpoint.type == ConcreteEndpoint::Type::ITEM)
+			{
+				const ItemEndpoint& itemEndpoint = itemEndpoints[endpoint.index];
+				std::cout << "[ Item " << itemEndpoint.item << " at (" << itemEndpoint.coordinate.x << ", " << itemEndpoint.coordinate.y << ") ]";
+			}
+			else
+			{
+				const PathConfig& pathConfig = pathConfigs[endpoint.index];
+				std::cout << "[ Path " << endpoint.index << " ]";
+			}
+		};
+
+		for (size_t i = 0; i < finalSolution->solution.size(); i++)
+		{
+			const auto& path = finalSolution->solution[i];
+			std::cout << "Path " << i << " ";
+			printEndpoint(pathConfigs[i].source);
+			std::cout << " to ";
+			printEndpoint(pathConfigs[i].destination);
+			std::cout << ", cost: " << path->cost;
+			std::cout << ", nodes: " << path->nodes.size() << std::endl;
+
+			for (const auto& node : path->nodes)
+			{
+				std::cout << "- ";
+				node->print();
+			}
+		}
+
+		std::cout << std::endl;
 	}
 
 private:
@@ -615,7 +672,8 @@ private:
 	size_t currentPathGroup = 0;
 	std::map<size_t, float> pathGroupSpareRates;
 	std::vector<PathConfig> pathConfigs;
-	CTNode finalSolution;
+	std::shared_ptr<CTNode> finalSolution;
+	bool finalSolutionFound = false;
 	bool fitnessCalculated = false;
 	float fitness = 0.0f;
 
@@ -839,7 +897,7 @@ private:
 		openSet.push_back(root);
 
 		// While there are nodes to process
-		bool foundSolution = false;
+		this->finalSolutionFound = false;
 		while (openSet.size() > 0)
 		{
 			// Pop the node with the lowest sum of path costs
@@ -866,8 +924,8 @@ private:
 			// If no conflict, have found a solution
 			if (!conflict.isConflict)
 			{
-				foundSolution = true;
-				this->finalSolution = std::move(*current);
+				this->finalSolutionFound = true;
+				this->finalSolution = current;
 				break;
 			}
 
@@ -902,13 +960,20 @@ private:
 		}
 
 		// No solution without conflicts found, fitness = 0
-		if (!foundSolution)
+		if (!this->finalSolutionFound)
 		{
 			#ifdef LOG2
 			std::cout << std::endl << "No solution found" << std::endl << std::endl;
 			#endif
 			fitness = 0.0f;
 			return;
+		}
+
+		// Move all calculated paths to the final solution
+		for (size_t i = 0; i < this->finalSolution->solution.size(); i++)
+		{
+			this->finalSolution->calculatedPaths[i] = std::move(*this->finalSolution->solution[i]);
+			this->finalSolution->solution[i] = &this->finalSolution->calculatedPaths[i];
 		}
 
 		// Solution found, fitness = sum (1 + shortest / real)
@@ -918,15 +983,15 @@ private:
 		fitness = 0.0f;
 		for (size_t i = 0; i < this->pathConfigs.size(); i++)
 		{
-			if (!this->finalSolution.solution[i]->found)
+			if (!this->finalSolution->solution[i]->found)
 			{
 				#ifdef LOG2
 				std::cout << "Path " << i << " in the solution, could not found" << std::endl;
 				#endif
 				continue;
 			}
-			float shortest = this->finalSolution.solution[i]->nodes[0]->getHCost();
-			float real = this->finalSolution.solution[i]->cost;
+			float shortest = this->finalSolution->solution[i]->nodes[0]->getHCost();
+			float real = this->finalSolution->solution[i]->cost;
 			if (shortest == 0) fitness += 2.0f;
 			else fitness += (1.0f + shortest / real);
 			#ifdef LOG2
@@ -1000,8 +1065,6 @@ private:
 
 	std::shared_ptr<PFState> resolvePathConfig(const std::shared_ptr<CTNode> node, size_t pathIndex)
 	{
-		// TODO: When checking a source or destination need to ensure it doesnt conflict with the CAT or the constraints of the path
-
 		// Attempt to resolve the path considering the given node
 		// Return nullptr is conflicts prevent resolution
 		const PathConfig& path = this->pathConfigs[pathIndex];
@@ -1131,6 +1194,8 @@ private:
 class LSState : public ls::State<LSState>
 {
 public:
+	static size_t evaluationCount;
+
 	struct InserterInstance
 	{
 		int item = -1;
@@ -1208,6 +1273,7 @@ public:
 	float getFitness() override
 	{
 		if (costCalculated) return fitness;
+		LSState::evaluationCount++;
 
 		fitness = 0.0f;
 
@@ -1282,7 +1348,7 @@ public:
 	{
 		calculateWorld();
 
-		std::cout << "-- Local State World --" << std::endl << std::endl;
+		std::cout << "--- Local State World ---" << std::endl << std::endl;
 
 		HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 
@@ -1313,7 +1379,8 @@ public:
 		SetConsoleTextAttribute(hConsole, 15);
 		std::cout << std::endl;
 
-		std::cout << "-- Local State Data --" << std::endl << std::endl;
+		std::cout << "--- Local State Data ---" << std::endl << std::endl;
+
 		for (const auto& assembler : assemblers)
 		{
 			std::cout << "Assembler: item " << assembler.item
@@ -1334,6 +1401,11 @@ public:
 		}
 
 		std::cout << std::endl;
+
+		if (this->isWorldValid)
+		{
+			pathfinding->print();
+		}
 	}
 
 private:
@@ -1448,6 +1520,9 @@ private:
 };
 
 std::map<size_t, std::shared_ptr<LSState>> LSState::cachedStates = std::map<size_t, std::shared_ptr<LSState>>();
+size_t LSState::evaluationCount = 0;
+size_t CBPathfinder::evaluationCount = 0;
+size_t PFState::evaluationCount = 0;
 
 class ProblemSolver
 {
@@ -1747,13 +1822,25 @@ private:
 
 		for (int i = bestRunConfig; i > 0; i--)
 		{
+			#ifdef LOG1
+			std::cout << "--- Evaluating run config " << i << " ---" << std::endl << std::endl;
+			#endif
+
 			const RunConfig& runConfig = possibleRunConfigs.at(i);
 
+			LSState::evaluationCount = 0;
+			CBPathfinder::evaluationCount = 0;
+			PFState::evaluationCount = 0;
+
 			std::shared_ptr<LSState> initialState = LSState::createRandom(problem, runConfig);
-			std::shared_ptr<LSState> finalState = ls::simulatedAnnealing(initialState, 2.0f, 0.004f, 1000);
+			std::shared_ptr<LSState> finalState = ls::simulatedAnnealing(initialState, 2.0f, 0.004f, 1000, true);
 
 			#ifdef LOG1
-			std::cout << "Run config " << i << " final state fitness: " << finalState->getFitness() << std::endl << std::endl;
+			std::cout << "Finished evaluation, summary:" << std::endl << std::endl;
+			std::cout << "- LSState Evaluation count: " << LSState::evaluationCount << std::endl;
+			std::cout << "- CBPathfinder Evaluation count: " << CBPathfinder::evaluationCount << std::endl;
+			std::cout << "- PFState Evaluation count: " << PFState::evaluationCount << std::endl;
+			std::cout << "- Final state fitness: " << finalState->getFitness() << std::endl << std::endl;
 			finalState->print();
 			#endif
 		}
@@ -1835,5 +1922,5 @@ void checkCBPathfinding()
 int main()
 {
 	srand(0);
-	checkCBPathfinding();
+	solveExampleProblem1();
 }

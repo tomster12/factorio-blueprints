@@ -1,0 +1,720 @@
+Solving...
+
+Stage: unravelRecipes()
+=========================
+
+Problem Input Items:
+- (0) at (0, 1) at 4/s
+
+Problem Output Item:
+- (2) at (9, 9)
+
+Problem Recipes:
+- (1)*1 at 0.5/s = (0)*1
+- (2)*1 at 0.5/s = (0)*2 (1)*2
+
+----------
+
+Solver Items:
+- (0) = Input ( Rate: 2 )
+- (1) = Component ( Rate: 1 )
+- (2) = Component ( Rate: 0.5 )
+
+
+Stage: calculateRunConfigs()
+=============================
+
+Run Config with output assemblers = 2
+        Input item: 0
+        Component item: 1
+          Assemblers: 4
+          Output inserters / assembler: 1 @ 0.5/s
+          Input inserters / assembler for 0: 1 @ 0.5/s
+        Component item: 2
+          Assemblers: 2
+          Output inserters / assembler: 1 @ 0.5/s
+          Input inserters / assembler for 0: 1 @ 1/s
+          Input inserters / assembler for 1: 1 @ 1/s
+
+Run Config with output assemblers = 1
+        Input item: 0
+        Component item: 1
+          Assemblers: 2
+          Output inserters / assembler: 1 @ 0.5/s
+          Input inserters / assembler for 0: 1 @ 0.5/s
+        Component item: 2
+          Assemblers: 1
+          Output inserters / assembler: 1 @ 0.5/s
+          Input inserters / assembler for 0: 1 @ 1/s
+          Input inserters / assembler for 1: 1 @ 1/s
+
+Run config 2 required space: 82 / 98
+Found best run config: 2
+
+Stage: performSearch()
+=======================
+
+--- Evaluating run config 2 ---
+
+Start, fitness: -25
+It 0, temperature:2, moving to a worse fitness: -26, chance 0.606531
+It 1, temperature:1.992, moving to a better fitness: -24
+It 2, temperature:1.98403, moving to a worse fitness: -25, chance 0.604095
+It 3, temperature:1.9761, moving to a better fitness: -25
+It 4, temperature:1.96819, moving to a better fitness: -24
+It 5, temperature:1.96032, moving to a better fitness: -24
+It 7, temperature:1.94467, moving to a better fitness: -23
+It 8, temperature:1.93689, moving to a better fitness: -22
+It 9, temperature:1.92914, moving to a worse fitness: -23, chance 0.595493
+It 10, temperature:1.92142, moving to a worse fitness: -24, chance 0.594255
+It 12, temperature:1.90608, moving to a better fitness: -23
+It 13, temperature:1.89846, moving to a better fitness: -23
+It 14, temperature:1.89087, moving to a better fitness: -23
+It 15, temperature:1.8833, moving to a better fitness: -23
+It 17, temperature:1.86827, moving to a better fitness: -22
+It 18, temperature:1.86079, moving to a better fitness: -21
+It 19, temperature:1.85335, moving to a better fitness: -21
+It 21, temperature:1.83855, moving to a worse fitness: -22, chance 0.580476
+It 22, temperature:1.8312, moving to a worse fitness: -23, chance 0.57921
+It 24, temperature:1.81658, moving to a better fitness: -23
+It 25, temperature:1.80931, moving to a worse fitness: -25, chance 0.331081
+It 26, temperature:1.80207, moving to a better fitness: -25
+It 27, temperature:1.79487, moving to a better fitness: -25
+It 28, temperature:1.78769, moving to a better fitness: -25
+It 29, temperature:1.78054, moving to a worse fitness: -26, chance 0.570279
+It 31, temperature:1.76632, moving to a worse fitness: -27, chance 0.567708
+It 32, temperature:1.75925, moving to a worse fitness: -28, chance 0.566418
+It 33, temperature:1.75222, moving to a better fitness: -28
+It 34, temperature:1.74521, moving to a better fitness: -28
+It 35, temperature:1.73823, moving to a better fitness: -27
+It 36, temperature:1.73127, moving to a better fitness: -27
+It 37, temperature:1.72435, moving to a better fitness: -27
+It 38, temperature:1.71745, moving to a worse fitness: -30, chance 0.174336
+It 39, temperature:1.71058, moving to a better fitness: -29
+It 40, temperature:1.70374, moving to a worse fitness: -30, chance 0.556024
+It 41, temperature:1.69693, moving to a better fitness: -29
+It 43, temperature:1.68338, moving to a better fitness: -28
+It 44, temperature:1.67664, moving to a better fitness: -28
+It 45, temperature:1.66994, moving to a better fitness: -27
+It 46, temperature:1.66326, moving to a better fitness: -25
+It 47, temperature:1.6566, moving to a better fitness: -24
+It 48, temperature:1.64998, moving to a better fitness: -23
+It 49, temperature:1.64338, moving to a worse fitness: -24, chance 0.544165
+It 50, temperature:1.6368, moving to a worse fitness: -26, chance 0.294672
+It 51, temperature:1.63026, moving to a better fitness: -26
+It 53, temperature:1.61724, moving to a better fitness: -26
+It 55, temperature:1.60433, moving to a better fitness: -26
+It 56, temperature:1.59791, moving to a better fitness: -26
+It 57, temperature:1.59152, moving to a better fitness: -25
+It 58, temperature:1.58515, moving to a worse fitness: -26, chance 0.532137
+It 59, temperature:1.57881, moving to a better fitness: -26
+It 60, temperature:1.5725, moving to a better fitness: -25
+It 61, temperature:1.56621, moving to a worse fitness: -26, chance 0.528092
+It 62, temperature:1.55994, moving to a better fitness: -26
+It 64, temperature:1.54749, moving to a better fitness: -26
+It 65, temperature:1.5413, moving to a better fitness: -26
+It 66, temperature:1.53513, moving to a better fitness: -26
+It 67, temperature:1.52899, moving to a better fitness: -26
+It 68, temperature:1.52288, moving to a better fitness: -26
+It 69, temperature:1.51679, moving to a better fitness: -26
+It 70, temperature:1.51072, moving to a better fitness: -26
+It 71, temperature:1.50468, moving to a better fitness: -26
+It 72, temperature:1.49866, moving to a better fitness: -26
+It 73, temperature:1.49266, moving to a better fitness: -25
+It 74, temperature:1.48669, moving to a better fitness: -24
+It 75, temperature:1.48074, moving to a better fitness: -24
+It 76, temperature:1.47482, moving to a worse fitness: -25, chance 0.507607
+It 77, temperature:1.46892, moving to a better fitness: -25
+It 78, temperature:1.46305, moving to a better fitness: -25
+It 79, temperature:1.45719, moving to a worse fitness: -26, chance 0.50346
+It 83, temperature:1.43402, moving to a better fitness: -26
+It 85, temperature:1.42257, moving to a better fitness: -24
+It 86, temperature:1.41688, moving to a better fitness: -22
+It 87, temperature:1.41121, moving to a better fitness: -21
+It 88, temperature:1.40557, moving to a better fitness: -20
+It 89, temperature:1.39994, moving to a worse fitness: -21, chance 0.489528
+It 90, temperature:1.39434, moving to a better fitness: -20
+It 92, temperature:1.38321, moving to a better fitness: -20
+It 98, temperature:1.35035, moving to a better fitness: -19
+It 100, temperature:1.33956, moving to a better fitness: -19
+It 102, temperature:1.32887, moving to a better fitness: -18
+It 104, temperature:1.31826, moving to a worse fitness: -19, chance 0.468333
+It 105, temperature:1.31299, moving to a worse fitness: -20, chance 0.466908
+It 108, temperature:1.29729, moving to a better fitness: -20
+It 111, temperature:1.28179, moving to a better fitness: -19
+It 112, temperature:1.27666, moving to a better fitness: -19
+It 114, temperature:1.26647, moving to a better fitness: -19
+It 115, temperature:1.2614, moving to a better fitness: -19
+It 116, temperature:1.25636, moving to a worse fitness: -20, chance 0.451151
+It 117, temperature:1.25133, moving to a better fitness: -20
+It 118, temperature:1.24633, moving to a better fitness: -19
+It 119, temperature:1.24134, moving to a better fitness: -18
+It 120, temperature:1.23637, moving to a worse fitness: -19, chance 0.445385
+It 122, temperature:1.2265, moving to a better fitness: -19
+It 125, temperature:1.21184, moving to a better fitness: -19
+It 126, temperature:1.207, moving to a better fitness: -19
+It 127, temperature:1.20217, moving to a better fitness: -19
+It 129, temperature:1.19257, moving to a better fitness: -19
+It 130, temperature:1.1878, moving to a better fitness: -19
+It 133, temperature:1.1736, moving to a worse fitness: -20, chance 0.426528
+It 134, temperature:1.16891, moving to a better fitness: -19
+It 135, temperature:1.16423, moving to a worse fitness: -20, chance 0.423613
+It 136, temperature:1.15958, moving to a better fitness: -20
+It 137, temperature:1.15494, moving to a better fitness: -19
+It 138, temperature:1.15032, moving to a better fitness: -19
+It 139, temperature:1.14572, moving to a better fitness: -19
+It 140, temperature:1.14113, moving to a worse fitness: -20, chance 0.416312
+It 141, temperature:1.13657, moving to a worse fitness: -21, chance 0.414849
+It 142, temperature:1.13202, moving to a better fitness: -20
+It 147, temperature:1.10956, moving to a better fitness: -20
+It 148, temperature:1.10513, moving to a worse fitness: -21, chance 0.404593
+It 149, temperature:1.1007, moving to a better fitness: -21
+It 150, temperature:1.0963, moving to a worse fitness: -22, chance 0.401657
+It 151, temperature:1.09192, moving to a worse fitness: -23, chance 0.400188
+It 154, temperature:1.07887, moving to a better fitness: -23
+It 155, temperature:1.07455, moving to a better fitness: -23
+It 157, temperature:1.06597, moving to a better fitness: -23
+It 158, temperature:1.06171, moving to a worse fitness: -24, chance 0.389894
+It 159, temperature:1.05746, moving to a better fitness: -23
+It 160, temperature:1.05323, moving to a better fitness: -23
+It 161, temperature:1.04902, moving to a better fitness: -23
+It 162, temperature:1.04482, moving to a better fitness: -22
+It 163, temperature:1.04064, moving to a worse fitness: -23, chance 0.382531
+It 164, temperature:1.03648, moving to a better fitness: -23
+It 165, temperature:1.03233, moving to a better fitness: -23
+It 167, temperature:1.02409, moving to a better fitness: -21
+It 168, temperature:1.02, moving to a better fitness: -21
+It 169, temperature:1.01592, moving to a better fitness: -21
+It 172, temperature:1.00377, moving to a better fitness: -21
+It 173, temperature:0.999758, moving to a better fitness: -20
+It 179, temperature:0.976002, moving to a better fitness: -19
+It 180, temperature:0.972098, moving to a worse fitness: -20, chance 0.35747
+It 184, temperature:0.956638, moving to a better fitness: -20
+It 189, temperature:0.937657, moving to a better fitness: -19
+It 192, temperature:0.92645, moving to a better fitness: -19
+It 195, temperature:0.915377, moving to a better fitness: -19
+It 197, temperature:0.908069, moving to a better fitness: -19
+It 201, temperature:0.893627, moving to a better fitness: -19
+It 203, temperature:0.886492, moving to a better fitness: -19
+It 205, temperature:0.879414, moving to a better fitness: -18
+It 211, temperature:0.858518, moving to a better fitness: -16
+It 212, temperature:0.855084, moving to a worse fitness: -17, chance 0.31053
+It 213, temperature:0.851664, moving to a better fitness: -17
+It 214, temperature:0.848257, moving to a worse fitness: -18, chance 0.307621
+It 215, temperature:0.844864, moving to a worse fitness: -19, chance 0.306168
+It 216, temperature:0.841485, moving to a better fitness: -19
+It 217, temperature:0.838119, moving to a better fitness: -19
+It 218, temperature:0.834766, moving to a better fitness: -19
+It 219, temperature:0.831427, moving to a better fitness: -18
+It 221, temperature:0.824789, moving to a better fitness: -18
+It 222, temperature:0.82149, moving to a better fitness: -18
+It 223, temperature:0.818204, moving to a better fitness: -18
+It 224, temperature:0.814931, moving to a better fitness: -18
+It 225, temperature:0.811671, moving to a better fitness: -18
+It 227, temperature:0.805191, moving to a better fitness: -17
+It 228, temperature:0.80197, moving to a better fitness: -17
+It 229, temperature:0.798762, moving to a better fitness: -16
+It 232, temperature:0.789216, moving to a better fitness: -16
+It 234, temperature:0.782914, moving to a better fitness: -15
+It 235, temperature:0.779783, moving to a better fitness: -15
+It 237, temperature:0.773557, moving to a better fitness: -15
+It 238, temperature:0.770463, moving to a better fitness: -15
+It 239, temperature:0.767381, moving to a better fitness: -14
+It 240, temperature:0.764311, moving to a better fitness: -13
+It 241, temperature:0.761254, moving to a better fitness: -13
+It 242, temperature:0.758209, moving to a better fitness: -13
+It 246, temperature:0.74615, moving to a better fitness: -13
+It 250, temperature:0.734283, moving to a better fitness: -13
+It 255, temperature:0.719715, moving to a worse fitness: -14, chance 0.249215
+It 256, temperature:0.716836, moving to a better fitness: -14
+It 258, temperature:0.711113, moving to a better fitness: -13
+It 263, temperature:0.697004, moving to a better fitness: -11
+It 264, temperature:0.694216, moving to a better fitness: -11
+It 269, temperature:0.680442, moving to a better fitness: -11
+It 273, temperature:0.66962, moving to a better fitness: -9
+It 275, temperature:0.664274, moving to a worse fitness: -11, chance 0.0492519
+It 276, temperature:0.661617, moving to a worse fitness: -12, chance 0.22059
+It 278, temperature:0.656334, moving to a better fitness: -12
+It 279, temperature:0.653709, moving to a better fitness: -12
+It 283, temperature:0.643312, moving to a better fitness: -12
+It 285, temperature:0.638176, moving to a worse fitness: -13, chance 0.208677
+It 286, temperature:0.635623, moving to a better fitness: -12
+It 289, temperature:0.628026, moving to a better fitness: -12
+It 290, temperature:0.625514, moving to a better fitness: -11
+It 291, temperature:0.623012, moving to a better fitness: -11
+It 292, temperature:0.62052, moving to a better fitness: -11
+It 294, temperature:0.615566, moving to a better fitness: -11
+It 295, temperature:0.613104, moving to a better fitness: -11
+It 296, temperature:0.610651, moving to a better fitness: -9
+It 299, temperature:0.603353, moving to a better fitness: -9
+It 300, temperature:0.600939, moving to a better fitness: -9
+It 301, temperature:0.598535, moving to a better fitness: -9
+It 304, temperature:0.591382, moving to a better fitness: -9
+It 307, temperature:0.584314, moving to a better fitness: -9
+It 309, temperature:0.579648, moving to a better fitness: -8
+It 311, temperature:0.57502, moving to a better fitness: -8
+It 312, temperature:0.57272, moving to a better fitness: -7
+It 316, temperature:0.563612, moving to a better fitness: -7
+It 317, temperature:0.561357, moving to a better fitness: -6
+It 319, temperature:0.556875, moving to a better fitness: -6
+It 320, temperature:0.554648, moving to a better fitness: -5
+It 324, temperature:0.545827, moving to a better fitness: -5
+It 330, temperature:0.532857, moving to a better fitness: -5
+It 332, temperature:0.528603, moving to a better fitness: -5
+It 333, temperature:0.526488, moving to a worse fitness: -6, chance 0.149662
+It 335, temperature:0.522285, moving to a better fitness: -6
+It 338, temperature:0.516042, moving to a better fitness: -6
+It 339, temperature:0.513978, moving to a worse fitness: -7, chance 0.1429
+It 344, temperature:0.503781, moving to a worse fitness: -8, chance 0.137382
+It 345, temperature:0.501765, moving to a better fitness: -8
+It 347, temperature:0.497759, moving to a better fitness: -8
+It 350, temperature:0.49181, moving to a better fitness: -8
+It 351, temperature:0.489843, moving to a better fitness: -8
+It 352, temperature:0.487883, moving to a better fitness: -8
+It 353, temperature:0.485932, moving to a better fitness: -8
+It 356, temperature:0.480124, moving to a better fitness: -8
+It 359, temperature:0.474385, moving to a worse fitness: -9, chance 0.121482
+It 360, temperature:0.472488, moving to a better fitness: -9
+It 361, temperature:0.470598, moving to a better fitness: -8
+It 362, temperature:0.468716, moving to a better fitness: -8
+It 366, temperature:0.461261, moving to a better fitness: -8
+It 369, temperature:0.455748, moving to a better fitness: -8
+It 371, temperature:0.452109, moving to a better fitness: -7
+It 375, temperature:0.444919, moving to a better fitness: -7
+It 377, temperature:0.441367, moving to a better fitness: -7
+It 379, temperature:0.437843, moving to a better fitness: -7
+It 391, temperature:0.417282, moving to a better fitness: -7
+It 392, temperature:0.415613, moving to a better fitness: -7
+It 393, temperature:0.413951, moving to a better fitness: -7
+It 400, temperature:0.402498, moving to a better fitness: -7
+It 401, temperature:0.400888, moving to a better fitness: -7
+It 402, temperature:0.399285, moving to a better fitness: -7
+It 404, temperature:0.396097, moving to a better fitness: -7
+It 406, temperature:0.392935, moving to a better fitness: -7
+It 407, temperature:0.391363, moving to a better fitness: -7
+It 411, temperature:0.385138, moving to a better fitness: -6
+It 412, temperature:0.383598, moving to a better fitness: -6
+It 416, temperature:0.377497, moving to a better fitness: -6
+It 417, temperature:0.375987, moving to a better fitness: -6
+It 421, temperature:0.370007, moving to a better fitness: -5
+It 428, temperature:0.35977, moving to a better fitness: -5
+It 432, temperature:0.354049, moving to a better fitness: -5
+It 435, temperature:0.349817, moving to a better fitness: -5
+It 448, temperature:0.332057, moving to a better fitness: -5
+It 451, temperature:0.328088, moving to a better fitness: -4
+It 452, temperature:0.326775, moving to a better fitness: -4
+It 458, temperature:0.319011, moving to a better fitness: -4
+It 467, temperature:0.307708, moving to a better fitness: -4
+It 469, temperature:0.305252, moving to a worse fitness: -5, chance 0.0377796
+It 472, temperature:0.301603, moving to a better fitness: -5
+It 474, temperature:0.299195, moving to a better fitness: -4
+It 491, temperature:0.279488, moving to a better fitness: -4
+It 492, temperature:0.27837, moving to a better fitness: -4
+It 498, temperature:0.271756, moving to a better fitness: -4
+It 502, temperature:0.267434, moving to a better fitness: -4
+It 510, temperature:0.258995, moving to a worse fitness: -5, chance 0.0210452
+It 518, temperature:0.250822, moving to a worse fitness: -6, chance 0.0185573
+It 522, temperature:0.246833, moving to a better fitness: -6
+It 523, temperature:0.245845, moving to a better fitness: -6
+It 525, temperature:0.243883, moving to a better fitness: -5
+It 527, temperature:0.241935, moving to a better fitness: -5
+It 529, temperature:0.240004, moving to a better fitness: -5
+It 530, temperature:0.239044, moving to a better fitness: -5
+It 542, temperature:0.227819, moving to a better fitness: -5
+It 543, temperature:0.226907, moving to a better fitness: -5
+It 546, temperature:0.224195, moving to a better fitness: -5
+It 549, temperature:0.221516, moving to a better fitness: -5
+It 550, temperature:0.22063, moving to a better fitness: -5
+It 561, temperature:0.211114, moving to a better fitness: -5
+It 572, temperature:0.202008, moving to a better fitness: -5
+It 573, temperature:0.2012, moving to a better fitness: -5
+It 575, temperature:0.199594, moving to a better fitness: -4
+It 577, temperature:0.198001, moving to a better fitness: -4
+It 583, temperature:0.193296, moving to a better fitness: -4
+It 591, temperature:0.187196, moving to a better fitness: -4
+It 593, temperature:0.185702, moving to a better fitness: -4
+It 604, temperature:0.177692, moving to a better fitness: -4
+It 615, temperature:0.170028, moving to a better fitness: -4
+It 621, temperature:0.165988, moving to a better fitness: -4
+It 637, temperature:0.155678, moving to a better fitness: -4
+It 640, temperature:0.153817, moving to a better fitness: -4
+It 663, temperature:0.140271, moving to a better fitness: -4
+It 666, temperature:0.138595, moving to a better fitness: -4
+It 674, temperature:0.134221, moving to a better fitness: -4
+It 683, temperature:0.129466, moving to a better fitness: -4
+It 698, temperature:0.121912, moving to a better fitness: -4
+It 722, temperature:0.110731, moving to a better fitness: -4
+It 727, temperature:0.108534, moving to a better fitness: -4
+It 728, temperature:0.1081, moving to a better fitness: -4
+It 735, temperature:0.105109, moving to a better fitness: -4
+It 736, temperature:0.104689, moving to a better fitness: -4
+It 738, temperature:0.103853, moving to a better fitness: -4
+It 746, temperature:0.100576, moving to a better fitness: -4
+It 747, temperature:0.100174, moving to a better fitness: -4
+It 761, temperature:0.0947074, moving to a better fitness: -4
+It 763, temperature:0.0939513, moving to a better fitness: -4
+It 764, temperature:0.0935754, moving to a better fitness: -4
+It 765, temperature:0.0932011, moving to a better fitness: -4
+It 766, temperature:0.0928283, moving to a better fitness: -4
+It 771, temperature:0.0909866, moving to a better fitness: -4
+It 777, temperature:0.0888246, moving to a better fitness: -4
+It 778, temperature:0.0884693, moving to a better fitness: -4
+It 781, temperature:0.0874119, moving to a better fitness: -4
+It 785, temperature:0.0860217, moving to a better fitness: -4
+It 786, temperature:0.0856776, moving to a better fitness: -4
+It 790, temperature:0.084315, moving to a better fitness: -4
+It 795, temperature:0.0826421, moving to a better fitness: -4
+It 804, temperature:0.0797141, moving to a better fitness: -4
+It 807, temperature:0.0787614, moving to a better fitness: -4
+It 810, temperature:0.07782, moving to a better fitness: -4
+It 821, temperature:0.0744636, moving to a better fitness: -4
+It 823, temperature:0.0738691, moving to a better fitness: -4
+It 828, temperature:0.0724035, moving to a better fitness: -4
+It 830, temperature:0.0718254, moving to a better fitness: -4
+It 836, temperature:0.0701187, moving to a better fitness: -4
+It 859, temperature:0.0639438, moving to a better fitness: -4
+It 860, temperature:0.0636881, moving to a better fitness: -4
+It 879, temperature:0.0590181, moving to a better fitness: -4
+It 890, temperature:0.0564726, moving to a better fitness: -4
+It 891, temperature:0.0562468, moving to a better fitness: -4
+It 892, temperature:0.0560218, moving to a better fitness: -4
+It 898, temperature:0.0546906, moving to a better fitness: -4
+It 912, temperature:0.0517063, moving to a better fitness: -4
+It 933, temperature:0.0475324, moving to a better fitness: -4
+It 937, temperature:0.0467764, moving to a better fitness: -4
+It 940, temperature:0.0462173, moving to a better fitness: -4
+It 944, temperature:0.0454823, moving to a better fitness: -4
+It 945, temperature:0.0453003, moving to a better fitness: -4
+It 946, temperature:0.0451191, moving to a better fitness: -4
+It 949, temperature:0.0445799, moving to a better fitness: -4
+It 953, temperature:0.0438709, moving to a better fitness: -4
+It 954, temperature:0.0436954, moving to a better fitness: -4
+It 957, temperature:0.0431731, moving to a better fitness: -4
+It 959, temperature:0.0428284, moving to a better fitness: -4
+It 960, temperature:0.0426571, moving to a better fitness: -4
+It 961, temperature:0.0424865, moving to a better fitness: -4
+It 966, temperature:0.0416435, moving to a better fitness: -4
+It 969, temperature:0.0411458, moving to a better fitness: -4
+It 971, temperature:0.0408173, moving to a better fitness: -4
+It 986, temperature:0.0384357, moving to a better fitness: -4
+It 998, temperature:0.0366308, moving to a better fitness: -4
+Finished 1000 iterations, fitness: -4, states evaluated: 46970
+
+Finished evaluation, summary:
+
+- LSState Evaluation count: 973
+- CBPathfinder Evaluation count: 0
+- PFState Evaluation count: 0
+- Final state fitness: -4
+
+--- Local State World ---
+
+ 20   111
+011 11111
+111 01111
+111 11111
+1111111111
+ 1 111111
+ 111111111
+   1111111
+ 21111111
+ 1111110 2
+
+--- Local State Data ---
+
+Assembler: item 1 at (6, 6)
+  Inserter: index 3 item 0 input at (9, 6) @ 0.5/s
+  Inserter: index 4 item 1 output at (9, 7) @ 0.5/s
+Assembler: item 1 at (6, 3)
+  Inserter: index 4 item 0 input at (9, 4) @ 0.5/s
+  Inserter: index 11 item 1 output at (5, 3) @ 0.5/s
+Assembler: item 1 at (3, 4)
+  Inserter: index 1 item 0 input at (4, 3) @ 0.5/s
+  Inserter: index 9 item 1 output at (2, 6) @ 0.5/s
+Assembler: item 1 at (6, 0)
+  Inserter: index 9 item 0 input at (5, 2) @ 0.5/s
+  Inserter: index 10 item 1 output at (5, 1) @ 0.5/s
+Assembler: item 2 at (0, 2)
+  Inserter: index 1 item 2 output at (1, 1) @ 0.5/s
+  Inserter: index 2 item 0 input at (2, 1) @ 1/s
+  Inserter: index 7 item 1 input at (1, 5) @ 1/s
+Assembler: item 2 at (3, 7)
+  Inserter: index 5 item 0 input at (6, 9) @ 1/s
+  Inserter: index 9 item 1 input at (2, 9) @ 1/s
+  Inserter: index 10 item 2 output at (2, 8) @ 0.5/s
+
+--- Evaluating run config 1 ---
+
+Start, fitness: -1
+It 0, temperature:2, moving to a better fitness: -1
+It 1, temperature:1.992, moving to a better fitness: 8.17687
+It 3, temperature:1.9761, moving to a worse fitness: 5.68437, chance 0.283279
+It 5, temperature:1.96032, moving to a better fitness: 8.50935
+It 6, temperature:1.95248, moving to a better fitness: 8.50989
+It 7, temperature:1.94467, moving to a better fitness: 8.53586
+It 9, temperature:1.92914, moving to a worse fitness: 6.08442, chance 0.280623
+It 10, temperature:1.92142, moving to a better fitness: 6.08442
+It 14, temperature:1.89087, moving to a worse fitness: 6.0234, chance 0.968246
+It 15, temperature:1.8833, moving to a better fitness: 6.09748
+It 16, temperature:1.87577, moving to a better fitness: 8.41291
+It 18, temperature:1.86079, moving to a better fitness: 8.41355
+It 24, temperature:1.81658, moving to a better fitness: 8.9914
+It 25, temperature:1.80931, moving to a worse fitness: 8.41355, chance 0.726602
+It 28, temperature:1.78769, moving to a worse fitness: 8.35593, chance 0.968283
+It 31, temperature:1.76632, moving to a worse fitness: 8.25058, chance 0.942098
+It 35, temperature:1.73823, moving to a worse fitness: 6.55944, chance 0.377982
+It 37, temperature:1.72435, moving to a worse fitness: 6.45879, chance 0.9433
+It 39, temperature:1.71058, moving to a better fitness: 6.63978
+It 40, temperature:1.70374, moving to a better fitness: 6.79385
+It 41, temperature:1.69693, moving to a better fitness: 6.80836
+It 44, temperature:1.67664, moving to a better fitness: 7.81685
+It 45, temperature:1.66994, moving to a better fitness: 7.81685
+It 47, temperature:1.6566, moving to a better fitness: 8.52098
+It 49, temperature:1.64338, moving to a worse fitness: 8.49255, chance 0.982848
+It 51, temperature:1.63026, moving to a better fitness: 8.53416
+It 53, temperature:1.61724, moving to a better fitness: 9.28736
+It 56, temperature:1.59791, moving to a worse fitness: 9.28346, chance 0.997566
+It 61, temperature:1.56621, moving to a worse fitness: 9.16535, chance 0.92736
+It 62, temperature:1.55994, moving to a better fitness: 9.28346
+It 63, temperature:1.5537, moving to a worse fitness: 9.07275, chance 0.873178
+It 64, temperature:1.54749, moving to a worse fitness: 8.95464, chance 0.926514
+It 65, temperature:1.5413, moving to a worse fitness: 8.03865, chance 0.551948
+It 68, temperature:1.52288, moving to a better fitness: 8.22937
+It 69, temperature:1.51679, moving to a worse fitness: 6.47139, chance 0.313795
+It 71, temperature:1.50468, moving to a better fitness: 6.50649
+It 72, temperature:1.49866, moving to a better fitness: 6.65418
+It 73, temperature:1.49266, moving to a better fitness: 6.76373
+It 76, temperature:1.47482, moving to a better fitness: 6.94175
+It 79, temperature:1.45719, moving to a worse fitness: 6.82187, chance 0.92102
+It 80, temperature:1.45137, moving to a worse fitness: 6.80464, chance 0.988202
+It 82, temperature:1.43978, moving to a worse fitness: 6.20704, chance 0.660296
+It 83, temperature:1.43402, moving to a worse fitness: 6.10402, chance 0.930685
+It 87, temperature:1.41121, moving to a better fitness: 6.24578
+It 88, temperature:1.40557, moving to a better fitness: 6.28552
+It 89, temperature:1.39994, moving to a better fitness: 6.44055
+It 90, temperature:1.39434, moving to a better fitness: 7.92119
+It 92, temperature:1.38321, moving to a better fitness: 7.92547
+It 100, temperature:1.33956, moving to a worse fitness: 6.7435, chance 0.413807
+It 101, temperature:1.33421, moving to a worse fitness: 6.12541, chance 0.629226
+It 102, temperature:1.32887, moving to a better fitness: 6.33463
+It 103, temperature:1.32355, moving to a better fitness: 7.6613
+It 105, temperature:1.31299, moving to a worse fitness: 7.6194, chance 0.968591
+It 107, temperature:1.3025, moving to a worse fitness: 6.26457, chance 0.353394
+It 113, temperature:1.27155, moving to a better fitness: 6.6511
+It 117, temperature:1.25133, moving to a worse fitness: 6.56489, chance 0.933424
+It 121, temperature:1.23143, moving to a better fitness: 7.74195
+It 122, temperature:1.2265, moving to a better fitness: 7.89379
+It 123, temperature:1.2216, moving to a better fitness: 7.93978
+It 125, temperature:1.21184, moving to a better fitness: 8.08142
+It 126, temperature:1.207, moving to a better fitness: 8.10582
+It 128, temperature:1.19736, moving to a better fitness: 8.11771
+It 130, temperature:1.1878, moving to a better fitness: 8.23812
+It 132, temperature:1.17832, moving to a better fitness: 8.37711
+It 134, temperature:1.16891, moving to a better fitness: 9.77516
+It 137, temperature:1.15494, moving to a worse fitness: 9.63477, chance 0.885541
+It 141, temperature:1.13657, moving to a better fitness: 9.83363
+It 152, temperature:1.08755, moving to a better fitness: 9.90801
+It 157, temperature:1.06597, moving to a better fitness: 9.90801
+It 159, temperature:1.05746, moving to a better fitness: 10.0394
+It 160, temperature:1.05323, moving to a worse fitness: 9.98291, chance 0.947814
+It 162, temperature:1.04482, moving to a better fitness: 10.0252
+It 164, temperature:1.03648, moving to a better fitness: 10.3585
+It 167, temperature:1.02409, moving to a worse fitness: 9.3797, chance 0.384496
+It 171, temperature:1.0078, moving to a worse fitness: 9.29895, chance 0.923001
+It 176, temperature:0.987809, moving to a worse fitness: 9.12766, chance 0.840799
+It 178, temperature:0.979922, moving to a better fitness: 9.25334
+It 182, temperature:0.964337, moving to a worse fitness: 8.6757, chance 0.54936
+It 185, temperature:0.952811, moving to a better fitness: 8.84494
+It 188, temperature:0.941423, moving to a worse fitness: 8.81091, chance 0.964502
+It 194, temperature:0.919054, moving to a worse fitness: 8.64167, chance 0.831815
+It 195, temperature:0.915377, moving to a better fitness: 9.17027
+It 201, temperature:0.893627, moving to a better fitness: 9.41012
+It 205, temperature:0.879414, moving to a better fitness: 9.52139
+It 211, temperature:0.858518, moving to a better fitness: 9.56584
+It 215, temperature:0.844864, moving to a worse fitness: 9.49522, chance 0.919817
+It 223, temperature:0.818204, moving to a better fitness: 9.8165
+It 235, temperature:0.779783, moving to a better fitness: 9.89641
+It 246, temperature:0.74615, moving to a worse fitness: 9.65609, chance 0.724639
+It 261, temperature:0.702613, moving to a better fitness: 9.67556
+It 266, temperature:0.688673, moving to a worse fitness: 9.45735, chance 0.728438
+It 269, temperature:0.680442, moving to a better fitness: 9.67556
+It 270, temperature:0.67772, moving to a better fitness: 9.6846
+It 271, temperature:0.675009, moving to a better fitness: 9.80966
+It 274, temperature:0.666941, moving to a worse fitness: 9.66927, chance 0.81018
+It 286, temperature:0.635623, moving to a better fitness: 10.0638
+It 287, temperature:0.633081, moving to a worse fitness: 9.23782, chance 0.271267
+It 289, temperature:0.628026, moving to a better fitness: 9.75211
+It 290, temperature:0.625514, moving to a worse fitness: 9.41877, chance 0.586903
+It 297, temperature:0.608209, moving to a better fitness: 9.83401
+It 306, temperature:0.58666, moving to a worse fitness: 9.63965, chance 0.717995
+It 308, temperature:0.581976, moving to a better fitness: 9.83401
+It 311, temperature:0.57502, moving to a worse fitness: 9.64123, chance 0.715151
+It 312, temperature:0.57272, moving to a worse fitness: 9.20565, chance 0.467414
+It 313, temperature:0.570429, moving to a better fitness: 9.69174
+It 316, temperature:0.563612, moving to a better fitness: 9.92043
+It 324, temperature:0.545827, moving to a worse fitness: 9.90183, chance 0.966503
+It 326, temperature:0.541469, moving to a better fitness: 10.2352
+It 329, temperature:0.534997, moving to a better fitness: 10.3903
+It 330, temperature:0.532857, moving to a worse fitness: 10.0756, chance 0.553963
+It 332, temperature:0.528603, moving to a worse fitness: 9.97688, chance 0.829634
+It 337, temperature:0.518115, moving to a better fitness: 10.2709
+It 340, temperature:0.511922, moving to a worse fitness: 9.18501, chance 0.119896
+It 342, temperature:0.507835, moving to a worse fitness: 8.91002, chance 0.581867
+It 343, temperature:0.505804, moving to a better fitness: 8.99735
+It 344, temperature:0.503781, moving to a worse fitness: 8.2847, chance 0.24302
+It 346, temperature:0.499758, moving to a better fitness: 9.53605
+It 347, temperature:0.497759, moving to a worse fitness: 9.51374, chance 0.956165
+It 348, temperature:0.495768, moving to a worse fitness: 9.33753, chance 0.700875
+It 349, temperature:0.493785, moving to a worse fitness: 9.06065, chance 0.570788
+It 352, temperature:0.487883, moving to a better fitness: 9.86482
+It 353, temperature:0.485932, moving to a worse fitness: 9.66482, chance 0.662603
+It 354, temperature:0.483988, moving to a worse fitness: 9.57503, chance 0.830669
+It 356, temperature:0.480124, moving to a better fitness: 9.58935
+It 364, temperature:0.464973, moving to a better fitness: 9.66104
+It 377, temperature:0.441367, moving to a worse fitness: 9.5512, chance 0.779696
+It 381, temperature:0.434347, moving to a worse fitness: 9.29032, chance 0.548468
+It 387, temperature:0.424026, moving to a worse fitness: 8.95699, chance 0.455611
+It 390, temperature:0.418958, moving to a better fitness: 9.12812
+It 393, temperature:0.413951, moving to a better fitness: 9.42705
+It 396, temperature:0.409003, moving to a better fitness: 9.62664
+It 397, temperature:0.407367, moving to a better fitness: 9.67424
+It 407, temperature:0.391363, moving to a better fitness: 9.76403
+It 411, temperature:0.385138, moving to a better fitness: 9.80242
+It 412, temperature:0.383598, moving to a worse fitness: 9.75482, chance 0.883302
+It 414, temperature:0.380535, moving to a worse fitness: 9.66502, chance 0.789812
+It 416, temperature:0.377497, moving to a worse fitness: 9.60104, chance 0.844089
+It 426, temperature:0.362666, moving to a worse fitness: 8.22249, chance 0.0223452
+It 427, temperature:0.361215, moving to a better fitness: 8.87088
+It 428, temperature:0.35977, moving to a worse fitness: 8.76275, chance 0.740406
+It 431, temperature:0.35547, moving to a better fitness: 8.76275
+It 432, temperature:0.354049, moving to a worse fitness: 8.59758, chance 0.627193
+It 434, temperature:0.351222, moving to a better fitness: 8.59828
+It 445, temperature:0.336073, moving to a better fitness: 8.70406
+It 449, temperature:0.330728, moving to a better fitness: 8.76609
+It 450, temperature:0.329405, moving to a better fitness: 8.78132
+It 453, temperature:0.325468, moving to a better fitness: 9.11016
+It 463, temperature:0.312681, moving to a worse fitness: 9.08297, chance 0.916729
+It 468, temperature:0.306478, moving to a better fitness: 9.96663
+It 480, temperature:0.292086, moving to a better fitness: 10.1127
+It 501, temperature:0.268508, moving to a worse fitness: 9.96663, chance 0.58052
+It 502, temperature:0.267434, moving to a better fitness: 10.1127
+It 503, temperature:0.266364, moving to a worse fitness: 9.19109, chance 0.0314372
+It 517, temperature:0.251829, moving to a better fitness: 10.1127
+It 533, temperature:0.236187, moving to a better fitness: 10.3782
+It 541, temperature:0.228734, moving to a better fitness: 10.5538
+It 553, temperature:0.217993, moving to a better fitness: 10.6435
+It 585, temperature:0.191752, moving to a worse fitness: 10.468, chance 0.400229
+It 586, temperature:0.190985, moving to a better fitness: 10.7619
+It 609, temperature:0.174167, moving to a worse fitness: 10.4589, chance 0.175541
+It 615, temperature:0.170028, moving to a worse fitness: 10.236, chance 0.269499
+It 622, temperature:0.165324, moving to a worse fitness: 9.99442, chance 0.231974
+It 623, temperature:0.164663, moving to a better fitness: 10.2764
+It 626, temperature:0.162695, moving to a worse fitness: 10.1261, chance 0.397071
+It 629, temperature:0.16075, moving to a worse fitness: 10.0454, chance 0.60512
+It 630, temperature:0.160107, moving to a better fitness: 10.1261
+It 641, temperature:0.153202, moving to a better fitness: 10.3135
+It 651, temperature:0.147183, moving to a better fitness: 10.6045
+It 652, temperature:0.146594, moving to a better fitness: 10.661
+It 655, temperature:0.144842, moving to a worse fitness: 10.6045, chance 0.677237
+It 658, temperature:0.143111, moving to a better fitness: 10.6468
+It 691, temperature:0.125381, moving to a better fitness: 10.6559
+It 693, temperature:0.12438, moving to a worse fitness: 10.6435, chance 0.905567
+It 694, temperature:0.123882, moving to a worse fitness: 10.5489, chance 0.465769
+It 712, temperature:0.115259, moving to a better fitness: 10.563
+It 719, temperature:0.112071, moving to a better fitness: 10.857
+It 727, temperature:0.108534, moving to a better fitness: 10.857
+It 728, temperature:0.1081, moving to a better fitness: 11.151
+It 739, temperature:0.103438, moving to a better fitness: 11.151
+It 766, temperature:0.0928283, moving to a better fitness: 11.151
+It 814, temperature:0.0765824, moving to a better fitness: 11.151
+It 846, temperature:0.0673639, moving to a better fitness: 11.151
+It 855, temperature:0.0649773, moving to a better fitness: 11.151
+It 873, temperature:0.0604546, moving to a better fitness: 11.151
+It 876, temperature:0.059732, moving to a better fitness: 11.151
+It 926, temperature:0.0488848, moving to a worse fitness: 11.1267, chance 0.607925
+It 962, temperature:0.0423165, moving to a better fitness: 11.1627
+It 980, temperature:0.0393712, moving to a worse fitness: 11.1267, chance 0.401066
+It 987, temperature:0.0382819, moving to a better fitness: 11.1627
+It 994, temperature:0.0372228, moving to a better fitness: 11.4846
+Finished 1000 iterations, fitness: 11.4846, states evaluated: 11406
+
+Finished evaluation, summary:
+
+- LSState Evaluation count: 861
+- CBPathfinder Evaluation count: 400
+- PFState Evaluation count: 305560
+- Final state fitness: 11.4846
+
+--- Local State World ---
+
+      111
+0   01111
+  111 111
+21111   1
+0111111 1
+
+01111
+  11111
+  111
+         2
+
+--- Local State Data ---
+
+Assembler: item 1 at (6, 0)
+  Inserter: index 6 item 1 output at (8, 3) @ 0.5/s
+  Inserter: index 10 item 0 input at (5, 1) @ 0.5/s
+Assembler: item 1 at (2, 6)
+  Inserter: index 4 item 1 output at (5, 7) @ 0.5/s
+  Inserter: index 11 item 0 input at (1, 6) @ 0.5/s
+Assembler: item 2 at (2, 2)
+  Inserter: index 5 item 1 input at (5, 4) @ 1/s
+  Inserter: index 9 item 0 input at (1, 4) @ 1/s
+  Inserter: index 10 item 2 output at (1, 3) @ 0.5/s
+
+--- CB Pathfinding ---
+
+Solution found, fitness: 11.4846
+
+Constraints: ( 0 0 0 0 0 1 )
+Path 0 [ Item 0 at (0, 1) ] to [ Item 0 at (0, 4) ], cost: 3, nodes: 5
+- [ (0, 1) N | None ]
+- [ (0, 1) S | UndergroundEntrance ]
+- [ (0, 2) S | Underground ]
+- [ (0, 3) S | Underground ]
+- [ (0, 4) S | UndergroundExit ]
+Path 1 [ Path 0 ] to [ Item 0 at (0, 6) ], cost: 1, nodes: 2
+- [ (0, 5) S | UndergroundExit ]
+- [ (0, 6) S | Conveyor ]
+Path 2 [ Path 0 ] to [ Item 0 at (4, 1) ], cost: 4.5, nodes: 4
+- [ (1, 1) E | UndergroundExit ]
+- [ (2, 1) E | UndergroundEntrance ]
+- [ (3, 1) E | Underground ]
+- [ (4, 1) E | UndergroundExit ]
+Path 3 [ Item 1 at (8, 4) ] to [ Item 1 at (6, 4) ], cost: 1.5, nodes: 4
+- [ (8, 4) N | None ]
+- [ (8, 4) W | UndergroundEntrance ]
+- [ (7, 4) W | Underground ]
+- [ (6, 4) W | UndergroundExit ]
+Path 4 [ Item 1 at (6, 7) ] to [ Path 3 ], cost: 1.5, nodes: 4
+- [ (6, 7) N | None ]
+- [ (6, 7) N | UndergroundEntrance ]
+- [ (6, 6) N | Underground ]
+- [ (6, 5) N | UndergroundExit ]
+Path 5 [ Item 2 at (0, 3) ] to [ Item 2 at (9, 9) ], cost: 71.5, nodes: 17
+- [ (0, 3) N | None ]
+- [ (0, 3) E | UndergroundEntrance ]
+- [ (1, 3) E | Underground ]
+- [ (2, 3) E | Underground ]
+- [ (3, 3) E | Underground ]
+- [ (4, 3) E | Underground ]
+- [ (5, 3) E | Underground ]
+- [ (6, 3) E | UndergroundExit ]
+- [ (7, 3) E | Conveyor ]
+- [ (7, 4) S | UndergroundEntrance ]
+- [ (7, 5) S | Underground ]
+- [ (7, 6) S | Underground ]
+- [ (7, 7) S | Underground ]
+- [ (7, 8) S | UndergroundExit ]
+- [ (7, 9) S | Conveyor ]
+- [ (8, 9) E | Conveyor ]
+- [ (9, 9) E | Conveyor ]

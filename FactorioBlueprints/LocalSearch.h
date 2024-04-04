@@ -97,7 +97,7 @@ namespace ls
 			if (delta >= 0)
 			{
 				current = next;
-				if (toLog) std::cout << "It " << it << ", better fitness: " << next->getFitness() << std::endl;
+				if (toLog) std::cout << "It " << it << ", temperature:" << temperature << ", moving to a better fitness: " << next->getFitness() << std::endl;
 			}
 
 			// If worse, accept with probability
@@ -107,7 +107,7 @@ namespace ls
 				if ((acceptanceProbability > (rand() / (float)RAND_MAX)))
 				{
 					current = next;
-					if (toLog) std::cout << "It " << it << ", worse fitness: " << next->getFitness() << ", chance " << acceptanceProbability << std::endl;
+					if (toLog) std::cout << "It " << it << ", temperature:" << temperature << ", moving to a worse fitness: " << next->getFitness() << ", chance " << acceptanceProbability << std::endl;
 				}
 			}
 
