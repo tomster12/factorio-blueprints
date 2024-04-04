@@ -381,7 +381,13 @@ public:
 
 	void print()
 	{
-		std::string typeStr = type == BeltType::None ? "None" : type == BeltType::Conveyor ? "Conveyor" : type == BeltType::UndergroundEntrance ? "UndergroundEntrance" : type == BeltType::Underground ? "Underground" : "UndergroundExit";
+		std::string typeStr = type == BeltType::None ? "None" :
+			type == BeltType::Conveyor ? "Conveyor" :
+			type == BeltType::UndergroundEntrance ? "UndergroundEntrance" :
+			type == BeltType::Underground ? "Underground" :
+			type == BeltType::UndergroundExit ? "UndergroundExit" :
+			type == BeltType::Inserter ? "Inserter"
+			: "Unknown";
 		std::cout << "[ (" << coordinate.x << ", " << coordinate.y << ") " << dirString(direction) << " | " << typeStr << " ]" << std::endl;
 	}
 
@@ -992,6 +998,10 @@ private:
 			}
 			float shortest = this->finalSolution->solution[i]->nodes[0]->getHCost();
 			float real = this->finalSolution->solution[i]->cost;
+
+			// Its possible with underground belts to have a lower cost, but cap it to max
+			real = std::max(real, shortest);
+
 			if (shortest == 0) fitness += 2.0f;
 			else fitness += (1.0f + shortest / real);
 			#ifdef LOG2

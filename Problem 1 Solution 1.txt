@@ -683,10 +683,10 @@ Path 0 [ Item 0 at (0, 1) ] to [ Item 0 at (0, 4) ], cost: 3, nodes: 5
 - [ (0, 3) S | Underground ]
 - [ (0, 4) S | UndergroundExit ]
 Path 1 [ Path 0 ] to [ Item 0 at (0, 6) ], cost: 1, nodes: 2
-- [ (0, 5) S | UndergroundExit ]
+- [ (0, 5) S | Inserter ]
 - [ (0, 6) S | Conveyor ]
 Path 2 [ Path 0 ] to [ Item 0 at (4, 1) ], cost: 4.5, nodes: 4
-- [ (1, 1) E | UndergroundExit ]
+- [ (1, 1) E | Inserter ]
 - [ (2, 1) E | UndergroundEntrance ]
 - [ (3, 1) E | Underground ]
 - [ (4, 1) E | UndergroundExit ]
