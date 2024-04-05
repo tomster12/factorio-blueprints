@@ -33,7 +33,7 @@ namespace ls
 	};
 
 	template<typename T>
-	std::shared_ptr<T> hillClimbing(std::shared_ptr<T> start, int maxIterations = 100)
+	std::shared_ptr<T> hillClimbing(std::shared_ptr<T> start, int maxIterations = 100, std::shared_ptr<Logger> logger = nullptr)
 	{
 		static_assert(std::is_base_of<State<T>, T>::value, "T must be a subclass of State<T>.");
 
@@ -45,6 +45,12 @@ namespace ls
 		#ifdef LOG_LS
 		std::cout << "Start, fitness: " << current->getFitness() << std::endl;
 		#endif
+		if (logger != nullptr)
+		{
+			std::vector<float> logRow{ 0 };
+			current->log(logRow);
+			logger->log(logRow);
+		}
 
 		// Until max iterations or local maximum
 		std::shared_ptr<T> best = start;
@@ -75,6 +81,12 @@ namespace ls
 			std::cout << "It " << it << ", better fitness: " << best->getFitness() << std::endl;
 			#endif
 			current = best;
+			if (logger != nullptr)
+			{
+				std::vector<float> logRow{ (float)it + 1.0f };
+				current->log(logRow);
+				logger->log(logRow);
+			}
 
 			// Update best
 			if (current->getFitness() > best->getFitness()) best = current;
@@ -98,6 +110,12 @@ namespace ls
 		#ifdef LOG_LS
 		std::cout << "Start, fitness: " << current->getFitness() << std::endl;
 		#endif
+		if (logger != nullptr)
+		{
+			std::vector<float> logRow{ 0 };
+			current->log(logRow);
+			logger->log(logRow);
+		}
 
 		// Until max iterations or local maximum
 		size_t it = 0;
@@ -117,7 +135,7 @@ namespace ls
 				#endif
 				if (logger != nullptr)
 				{
-					std::vector<float> logRow{ (float)it };
+					std::vector<float> logRow{ (float)it + 1.0f };
 					current->log(logRow);
 					logger->log(logRow);
 				}
@@ -135,7 +153,7 @@ namespace ls
 					#endif
 					if (logger != nullptr)
 					{
-						std::vector<float> logRow{ (float)it };
+						std::vector<float> logRow{ (float)it + 1.0f };
 						current->log(logRow);
 						logger->log(logRow);
 					}

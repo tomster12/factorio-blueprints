@@ -1,13 +1,4 @@
 #define NOMINMAX
-#define LOG_SOLVER
-// #define LOG_LOW
-#define LOG_LS
-
-#define SRAND_SEED 0
-#define LOG_PREFIX "p3_"
-#define ANNEALING_TEMP 2.0f
-#define ANNEALING_COOLING 0.005f
-#define ANNEALING_ITERATIONS 1000
 
 #include <windows.h>
 #include <iostream>
@@ -19,8 +10,31 @@
 #include <string>
 #include <cassert>
 
+#define LOG_SOLVER
+// #define LOG_LOW
+#define LOG_LS
+
 #include "LocalSearch.h"
 #include "Pathfinding.h"
+
+#define SRAND_SEED 0
+#define USE_LOGGER
+#define LOG_PREFIX "p3_full_"
+#define USE_ANNEALING
+#define ANNEALING_TEMP 2.0f
+#define ANNEALING_COOLING 0.005f
+#define ANNEALING_ITERATIONS 1000
+#define HILLCLIMBING_ITERATIONS 1000
+
+void solveExampleProblem1();
+void solveExampleProblem2();
+void solveExampleProblem3();
+
+int main()
+{
+	srand(SRAND_SEED);
+	solveExampleProblem3();
+}
 
 // ------------------------------------------------
 
@@ -1303,11 +1317,11 @@ public:
 		calculateWorld();
 		fitness -= worldCost;
 
-		/*if (isWorldValid)
+		if (isWorldValid)
 		{
 			pathfinder = std::make_shared<CBPathfinder>(blockedGrid, itemEndpoints);
 			fitness += pathfinder->getFitness();
-		}*/
+		}
 
 		costCalculated = true;
 		return fitness;
@@ -1854,7 +1868,8 @@ private:
 			<< std::endl;
 		#endif
 
-		for (int i = bestRunConfig; i > 0; i--)
+		// for (int i = bestRunConfig; i > 0; i--)
+		for (int i = 1; i > 0; i--)
 		{
 			#ifdef LOG_SOLVER
 			std::cout << "--- Evaluating run config " << i << " ---" << std::endl << std::endl;
@@ -1866,20 +1881,22 @@ private:
 			CBPathfinder::evaluationCount = 0;
 			PFState::evaluationCount = 0;
 
-			std::shared_ptr<LSState> initialState = LSState::createRandom(problem, runConfig);
-			std::shared_ptr<LSState> finalState = ls::simulatedAnnealing(initialState, ANNEALING_TEMP, ANNEALING_COOLING, ANNEALING_ITERATIONS);
-
-			/*
+			#ifdef USE_LOGGER
 			auto logger = std::make_shared<Logger>();
 			std::shared_ptr<LSState> initialState = LSState::createRandom(problem, runConfig);
+
+			#ifdef USE_ANNEALING
 			std::shared_ptr<LSState> finalState = ls::simulatedAnnealing(initialState, ANNEALING_TEMP, ANNEALING_COOLING, ANNEALING_ITERATIONS, logger);
-			logger->save(
-				"logs/" + std::string(LOG_PREFIX)
-				+ "sa_rc-" + std::to_string(i)
-				+ "_srand-" + std::to_string(SRAND_SEED)
-				+ ".csv",
-				{ "Iteration", "Fitness", "Paths" });
-			*/
+			logger->save("logs/" + std::string(LOG_PREFIX) + "sa_rc-" + std::to_string(i) + "_srand-" + std::to_string(SRAND_SEED) + ".csv", { "Iteration", "Fitness", "Paths" });
+			#else
+			std::shared_ptr<LSState> finalState = ls::hillClimbing(initialState, HILLCLIMBING_ITERATIONS, logger);
+			logger->save("logs/" + std::string(LOG_PREFIX) + "hc_rc-" + std::to_string(i) + "_srand-" + std::to_string(SRAND_SEED) + ".csv", { "Iteration", "Fitness", "Paths" });
+			#endif
+
+			#else
+			std::shared_ptr<LSState> initialState = LSState::createRandom(problem, runConfig);
+			std::shared_ptr<LSState> finalState = ls::simulatedAnnealing(initialState, ANNEALING_TEMP, ANNEALING_COOLING, ANNEALING_ITERATIONS);
+			#endif
 
 			#ifdef LOG_SOLVER
 			std::cout << "Finished evaluation, summary:" << std::endl << std::endl;
@@ -1999,10 +2016,4 @@ void checkCBPathfinding()
 
 	// Request cost to trigger pathfinding
 	std::cout << "State fitness: " << state->getFitness() << std::endl;
-}
-
-int main()
-{
-	srand(SRAND_SEED);
-	solveExampleProblem3();
 }
