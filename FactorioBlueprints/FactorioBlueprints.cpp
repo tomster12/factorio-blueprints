@@ -4,6 +4,10 @@
 #define LOG_LS
 
 #define SRAND_SEED 0
+#define LOG_PREFIX "p3_"
+#define ANNEALING_TEMP 2.0f
+#define ANNEALING_COOLING 0.005f
+#define ANNEALING_ITERATIONS 1000
 
 #include <windows.h>
 #include <iostream>
@@ -1299,11 +1303,11 @@ public:
 		calculateWorld();
 		fitness -= worldCost;
 
-		if (isWorldValid)
+		/*if (isWorldValid)
 		{
 			pathfinder = std::make_shared<CBPathfinder>(blockedGrid, itemEndpoints);
 			fitness += pathfinder->getFitness();
-		}
+		}*/
 
 		costCalculated = true;
 		return fitness;
@@ -1421,7 +1425,7 @@ public:
 
 		std::cout << std::endl;
 
-		if (this->isWorldValid)
+		if (pathfinder != nullptr)
 		{
 			pathfinder->print();
 		}
@@ -1433,7 +1437,7 @@ public:
 		logRow.push_back(fitness);
 
 		// Log number of paths CBS found
-		if (!isWorldValid) logRow.push_back(0.0f);
+		if (pathfinder == nullptr) logRow.push_back(0.0f);
 		else logRow.push_back((float)pathfinder->getPathsFound());
 	}
 
@@ -1862,10 +1866,20 @@ private:
 			CBPathfinder::evaluationCount = 0;
 			PFState::evaluationCount = 0;
 
+			std::shared_ptr<LSState> initialState = LSState::createRandom(problem, runConfig);
+			std::shared_ptr<LSState> finalState = ls::simulatedAnnealing(initialState, ANNEALING_TEMP, ANNEALING_COOLING, ANNEALING_ITERATIONS);
+
+			/*
 			auto logger = std::make_shared<Logger>();
 			std::shared_ptr<LSState> initialState = LSState::createRandom(problem, runConfig);
-			std::shared_ptr<LSState> finalState = ls::simulatedAnnealing(initialState, 2.0f, 0.005f, 1000, logger);
-			logger->save("logs/log_runconfig_" + std::to_string(i) + "-" + std::to_string(SRAND_SEED) + "_2_0.005.csv", { "Iteration", "Fitness", "Paths" });
+			std::shared_ptr<LSState> finalState = ls::simulatedAnnealing(initialState, ANNEALING_TEMP, ANNEALING_COOLING, ANNEALING_ITERATIONS, logger);
+			logger->save(
+				"logs/" + std::string(LOG_PREFIX)
+				+ "sa_rc-" + std::to_string(i)
+				+ "_srand-" + std::to_string(SRAND_SEED)
+				+ ".csv",
+				{ "Iteration", "Fitness", "Paths" });
+			*/
 
 			#ifdef LOG_SOLVER
 			std::cout << "Finished evaluation, summary:" << std::endl << std::endl;
@@ -1885,6 +1899,23 @@ void solveExampleProblem1()
 {
 	// Define problem definition
 	std::map<int, Recipe> recipes;
+	recipes[1] = { 1, 1.0f, { { 0, 1 } } };
+
+	ProblemDefinition problem = ProblemDefinitionFactory::create()
+		->setRecipes(recipes)
+		->setSize(5, 5)
+		->addInputItem(0, 1.0f, 0, 1)
+		->addOutputItem(1, 4, 2)
+		->finalise();
+
+	// Run problem solver with given parameters
+	ProblemSolver solver = ProblemSolver::solve(problem);
+}
+
+void solveExampleProblem2()
+{
+	// Define problem definition
+	std::map<int, Recipe> recipes;
 	recipes[1] = { 1, 0.5f, { { 0, 1 } } };
 	recipes[2] = { 1, 0.5f, { { 0, 2 }, { 1, 2 } } };
 
@@ -1893,6 +1924,25 @@ void solveExampleProblem1()
 		->setSize(10, 10)
 		->addInputItem(0, 4.0f, 0, 1)
 		->addOutputItem(2, 9, 9)
+		->finalise();
+
+	// Run problem solver with given parameters
+	ProblemSolver solver = ProblemSolver::solve(problem);
+}
+
+void solveExampleProblem3()
+{
+	// Define problem definition
+	std::map<int, Recipe> recipes;
+	recipes[2] = { 1, 2.0f, { { 0, 1 }, { 1, 2 }} };
+	recipes[3] = { 1, 0.5f, { { 0, 3 }, { 2, 1 } } };
+
+	ProblemDefinition problem = ProblemDefinitionFactory::create()
+		->setRecipes(recipes)
+		->setSize(15, 15)
+		->addInputItem(0, 2.0f, 0, 2)
+		->addInputItem(1, 4.0f, 0, 10)
+		->addOutputItem(3, 14, 14)
 		->finalise();
 
 	// Run problem solver with given parameters
@@ -1954,5 +2004,5 @@ void checkCBPathfinding()
 int main()
 {
 	srand(SRAND_SEED);
-	solveExampleProblem1();
+	solveExampleProblem3();
 }
