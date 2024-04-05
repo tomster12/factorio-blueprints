@@ -9,6 +9,11 @@ namespace pf
 		return static_cast<float>(sqrt(pow(x2 - x1, 2) + pow(y2 - y1, 2)));
 	}
 
+	float ManhattanDistance(float x1, float y1, float x2, float y2)
+	{
+		return static_cast<float>(abs(x2 - x1) + abs(y2 - y1));
+	}
+
 	template<typename T>
 	class State
 	{
@@ -82,16 +87,16 @@ namespace pf
 			openSet.erase(std::remove(openSet.begin(), openSet.end(), current), openSet.end());//openSet.erase(current);
 			closedSet.push_back(current);//closedSet.insert(current);
 
-			// Add neighbors to open if not in open or closed set
-			for (std::shared_ptr<T> neighbor : current->getNeighbours())
+			// Add neighbours to open if not in open or closed set
+			for (std::shared_ptr<T> neighbour : current->getNeighbours())
 			{
-				if (std::find_if(closedSet.begin(), closedSet.end(), [&neighbor](const std::shared_ptr<T>& node) { return *node == *neighbor; }) != closedSet.end())
+				if (std::find_if(closedSet.begin(), closedSet.end(), [&neighbour](const std::shared_ptr<T>& node) { return *node == *neighbour; }) != closedSet.end())
 				{
 					continue;
 				}
-				if (std::find_if(openSet.begin(), openSet.end(), [&neighbor](const std::shared_ptr<T>& node) { return *node == *neighbor; }) == openSet.end())
+				if (std::find_if(openSet.begin(), openSet.end(), [&neighbour](const std::shared_ptr<T>& node) { return *node == *neighbour; }) == openSet.end())
 				{
-					openSet.push_back(neighbor);//openSet.insert(neighbor);
+					openSet.push_back(neighbour);//openSet.insert(neighbour);
 				}
 			}
 		}

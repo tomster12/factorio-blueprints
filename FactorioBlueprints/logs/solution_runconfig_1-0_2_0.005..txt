@@ -1,0 +1,78 @@
+Finished evaluation, summary:
+
+- LSState Evaluation count: 828
+- CBPathfinder Evaluation count: 368
+- PFState Evaluation count: 273210
+- Final state fitness: 10.735
+
+--- Local State World ---
+
+  1  1
+0 1  1
+111  111
+111  111
+11110111
+  1    1
+  1    0
+ 11110
+ 111
+ 11112   2
+
+--- Local State Data ---
+
+Assembler: item 1 at (0, 2)
+  Inserter: index 2 item 1 output at (2, 1) @ 0.5/s
+  Inserter: index 5 item 0 input at (3, 4) @ 0.5/s
+Assembler: item 1 at (5, 2)
+  Inserter: index 0 item 1 output at (5, 1) @ 0.5/s
+  Inserter: index 6 item 0 input at (7, 5) @ 0.5/s
+Assembler: item 2 at (1, 7)
+  Inserter: index 1 item 1 input at (2, 6) @ 1/s
+  Inserter: index 3 item 0 input at (4, 7) @ 1/s
+  Inserter: index 5 item 2 output at (4, 9) @ 0.5/s
+
+--- CB Pathfinding ---
+
+Solution found, fitness: 10.735
+
+Constraints: ( 0 0 0 0 0 0 )
+Path 0 [ Item 0 at (0, 1) ] to [ Item 0 at (5, 7) ], cost: 41, nodes: 13
+- [ (0, 1) N | None ]
+- [ (0, 1) S | UndergroundEntrance ]
+- [ (0, 2) S | Underground ]
+- [ (0, 3) S | Underground ]
+- [ (0, 4) S | Underground ]
+- [ (0, 5) S | UndergroundExit ]
+- [ (0, 6) S | Conveyor ]
+- [ (1, 6) E | UndergroundEntrance ]
+- [ (2, 6) E | Underground ]
+- [ (3, 6) E | Underground ]
+- [ (4, 6) E | UndergroundExit ]
+- [ (5, 6) E | Conveyor ]
+- [ (5, 7) S | Conveyor ]
+Path 1 [ Path 0 ] to [ Item 0 at (7, 6) ], cost: 1, nodes: 2
+- [ (6, 6) E | Inserter ]
+- [ (7, 6) N | Conveyor ]
+Path 2 [ Path 0 ] to [ Item 0 at (4, 4) ], cost: 1, nodes: 2
+- [ (4, 5) N | Inserter ]
+- [ (4, 4) N | Conveyor ]
+Path 3 [ Item 1 at (2, 0) ] to [ Item 1 at (2, 5) ], cost: 7.5, nodes: 7
+- [ (2, 0) N | None ]
+- [ (2, 0) S | UndergroundEntrance ]
+- [ (2, 1) S | Underground ]
+- [ (2, 2) S | Underground ]
+- [ (2, 3) S | Underground ]
+- [ (2, 4) S | Underground ]
+- [ (2, 5) S | UndergroundExit ]
+Path 4 [ Item 1 at (5, 0) ] to [ Path 3 ], cost: 1.5, nodes: 4
+- [ (5, 0) N | None ]
+- [ (5, 0) W | UndergroundEntrance ]
+- [ (4, 0) W | Underground ]
+- [ (3, 0) W | UndergroundExit ]
+Path 5 [ Item 2 at (5, 9) ] to [ Item 2 at (9, 9) ], cost: 5, nodes: 6
+- [ (5, 9) N | None ]
+- [ (5, 9) E | UndergroundEntrance ]
+- [ (6, 9) E | Underground ]
+- [ (7, 9) E | Underground ]
+- [ (8, 9) E | Underground ]
+- [ (9, 9) E | UndergroundExit ]
