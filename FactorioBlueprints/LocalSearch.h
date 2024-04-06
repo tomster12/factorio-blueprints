@@ -131,7 +131,7 @@ namespace ls
 			{
 				current = next;
 				#ifdef LOG_LS
-				std::cout << "It " << it << ", temperature:" << temperature << ", moving to a better fitness: " << next->getFitness() << std::endl;
+				std::cout << "It " << it << ", temperature: " << temperature << ", moving to a better fitness: " << next->getFitness() << std::endl;
 				#endif
 				if (logger != nullptr)
 				{

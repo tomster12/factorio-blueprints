@@ -27,6 +27,7 @@
 #define ANNEALING_ITERATIONS 1000
 #define HILLCLIMBING_ITERATIONS 1000
 
+void checkPathfinding();
 void solveExampleProblem1();
 void solveExampleProblem2();
 void solveExampleProblem3();
@@ -39,9 +40,8 @@ int main()
 
 // ------------------------------------------------
 
-enum class BeltType { None, Inserter, Conveyor, UndergroundEntrance, Underground, UndergroundExit };
-
-enum class Direction { N, S, W, E };
+enum class BeltType : uint8_t { None = 1, Inserter = 2, Conveyor = 4, UndergroundEntrance = 8, Underground = 16, UndergroundExit = 32 };
+enum class Direction : uint8_t { N = 1, S = 2, W = 4, E = 8 };
 
 struct Coordinate { int x = 0; int y = 0; };
 
@@ -181,14 +181,14 @@ struct PFGoal
 public:
 	PFGoal() : isValid(false) {}
 
-	PFGoal(Coordinate coordinate, std::set<BeltType> types, std::set<Direction> directions)
-		: coordinate(coordinate), types(types), directions(directions), isValid(true)
+	PFGoal(Coordinate coordinate, uint8_t typeFlags, uint8_t directionFlags)
+		: coordinate(coordinate), typeFlags(typeFlags), directionFlags(directionFlags), isValid(true)
 	{}
 
-	bool isValid = false;
 	Coordinate coordinate;
-	std::set<BeltType> types;
-	std::set<Direction> directions;
+	uint8_t typeFlags = 0;
+	uint8_t directionFlags = 0;
+	bool isValid = false;
 };
 
 struct PFData
@@ -355,8 +355,8 @@ public:
 	{
 		bool match = true;
 		match &= data.coordinate.x == goal.coordinate.x && data.coordinate.y == goal.coordinate.y;
-		if (goal.types.size() > 0) match &= goal.types.find(data.type) != goal.types.end();
-		if (goal.directions.size() > 0) match &= goal.directions.find(data.direction) != goal.directions.end();
+		if (goal.typeFlags > 0) match &= (goal.typeFlags & static_cast<uint8_t>(data.type)) > 0;
+		if (goal.directionFlags > 0) match &= (goal.directionFlags & static_cast<uint8_t>(data.direction)) > 0;
 		return match;
 	}
 
@@ -388,13 +388,13 @@ public:
 
 		for (size_t i = 0; i < neighbourCache[dataHash].size(); i++)
 		{
-			const PFData& neighbourData = neighbourCache[dataHash][i];
-
+			PFData& neighbourData = neighbourCache[dataHash][i].first;
 			if (blockedGrid[neighbourData.coordinate.x][neighbourData.coordinate.y] && (neighbourData.type != BeltType::None && neighbourData.type != BeltType::Underground)) continue;
-			const CATEntry neighbourEntry = calculateCATEntry(neighbourData.coordinate, neighbourData.type, neighbourData.direction);
+
+			const CATEntry& neighbourEntry = neighbourCache[dataHash][i].second;
 			if (std::find_if(constraints.begin(), constraints.end(), [&](const auto& constraint) { return checkCATEntryConflict(constraint, neighbourEntry); }) != constraints.end()) continue;
 
-			neighbours.push_back(&neighbourCache[dataHash][i]);
+			neighbours.push_back(&neighbourData);
 		}
 		return neighbours;
 	}
@@ -416,7 +416,7 @@ public:
 
 private:
 
-	static std::unordered_map<size_t, std::vector<PFData>> neighbourCache;
+	static std::unordered_map<size_t, std::vector<std::pair<PFData, CATEntry>>> neighbourCache;
 
 	const std::vector<std::vector<bool>>& blockedGrid;
 	const std::vector<CATEntry>& constraints;
@@ -447,15 +447,15 @@ private:
 	{
 		if (neighbourCache.find(dataHash) == neighbourCache.end())
 		{
-			neighbourCache[dataHash] = std::vector<PFData>();
+			neighbourCache[dataHash] = std::vector<std::pair<PFData, CATEntry>>();
 
 			if (data.type == BeltType::None)
 			{
 				for (int i = 0; i < 4; i++)
 				{
-					Direction newDirection = static_cast<Direction>(i);
-					neighbourCache[dataHash].push_back({ data.coordinate, BeltType::Conveyor, newDirection });
-					neighbourCache[dataHash].push_back({ data.coordinate, BeltType::UndergroundEntrance, newDirection });
+					Direction newDirection = static_cast<Direction>(1 << i);
+					neighbourCache[dataHash].push_back({ { data.coordinate, BeltType::Conveyor, newDirection }, {} });
+					neighbourCache[dataHash].push_back({ { data.coordinate, BeltType::UndergroundEntrance, newDirection }, {} });
 				}
 			}
 
@@ -463,12 +463,12 @@ private:
 			{
 				for (int i = 0; i < 4; i++)
 				{
-					Direction newDirection = static_cast<Direction>(i);
+					Direction newDirection = static_cast<Direction>(1 << i);
 					Coordinate offset = dirOffset(newDirection);
 					Coordinate newCoord = { data.coordinate.x + offset.x, data.coordinate.y + offset.y };
 					if (newCoord.x < 0 || newCoord.x >= blockedGrid.size() || newCoord.y < 0 || newCoord.y >= blockedGrid[0].size()) continue;
-					neighbourCache[dataHash].push_back({ newCoord, BeltType::Conveyor, newDirection });
-					neighbourCache[dataHash].push_back({ newCoord, BeltType::UndergroundEntrance, newDirection });
+					neighbourCache[dataHash].push_back({ { newCoord, BeltType::Conveyor, newDirection }, {} });
+					neighbourCache[dataHash].push_back({ { newCoord, BeltType::UndergroundEntrance, newDirection }, {} });
 				}
 			}
 
@@ -478,8 +478,8 @@ private:
 				Coordinate newCoord = { data.coordinate.x + offset.x, data.coordinate.y + offset.y };
 				if (newCoord.x >= 0 && newCoord.x < blockedGrid.size() && newCoord.y >= 0 && newCoord.y < blockedGrid[0].size())
 				{
-					neighbourCache[dataHash].push_back({ newCoord, BeltType::Underground, data.direction });
-					neighbourCache[dataHash].push_back({ newCoord, BeltType::UndergroundExit, data.direction });
+					neighbourCache[dataHash].push_back({ { newCoord, BeltType::Underground, data.direction }, {} });
+					neighbourCache[dataHash].push_back({ { newCoord, BeltType::UndergroundExit, data.direction }, {} });
 				}
 			}
 
@@ -489,8 +489,8 @@ private:
 				Coordinate newCoord = { data.coordinate.x + offset.x, data.coordinate.y + offset.y };
 				if (newCoord.x >= 0 && newCoord.x < blockedGrid.size() && newCoord.y >= 0 && newCoord.y < blockedGrid[0].size())
 				{
-					neighbourCache[dataHash].push_back({ newCoord, BeltType::Underground, data.direction });
-					neighbourCache[dataHash].push_back({ newCoord, BeltType::UndergroundExit, data.direction });
+					neighbourCache[dataHash].push_back({ { newCoord, BeltType::Underground, data.direction }, {} });
+					neighbourCache[dataHash].push_back({ { newCoord, BeltType::UndergroundExit, data.direction }, {} });
 				}
 			}
 
@@ -500,8 +500,8 @@ private:
 				Coordinate newCoord = { data.coordinate.x + offset.x, data.coordinate.y + offset.y };
 				if (newCoord.x >= 0 && newCoord.x < blockedGrid.size() && newCoord.y >= 0 && newCoord.y < blockedGrid[0].size())
 				{
-					neighbourCache[dataHash].push_back({ newCoord, BeltType::Conveyor, data.direction });
-					neighbourCache[dataHash].push_back({ newCoord, BeltType::UndergroundEntrance, data.direction });
+					neighbourCache[dataHash].push_back({ { newCoord, BeltType::Conveyor, data.direction }, {} });
+					neighbourCache[dataHash].push_back({ { newCoord, BeltType::UndergroundEntrance, data.direction }, {} });
 				}
 			}
 
@@ -513,12 +513,17 @@ private:
 				{
 					for (int i = 0; i < 4; i++)
 					{
-						Direction newDirection = Direction(i);
+						Direction newDirection = Direction(1 << i);
 						if (data.direction == dirOpposite(newDirection)) continue;
-						neighbourCache[dataHash].push_back({ newCoord, BeltType::Conveyor, newDirection });
-						neighbourCache[dataHash].push_back({ newCoord, BeltType::UndergroundEntrance, newDirection });
+						neighbourCache[dataHash].push_back({ { newCoord, BeltType::Conveyor, newDirection }, {} });
+						neighbourCache[dataHash].push_back({ { newCoord, BeltType::UndergroundEntrance, newDirection }, {} });
 					}
 				}
+			}
+
+			for (auto& neighbour : neighbourCache[dataHash])
+			{
+				neighbour.second = calculateCATEntry(neighbour.first.coordinate, neighbour.first.type, neighbour.first.direction);
 			}
 		}
 	}
@@ -955,7 +960,7 @@ private:
 
 			fitness = 0.0f;
 			return;
-}
+		}
 
 		// Solution found, fitness = sum (1 + shortest / real)
 		#ifdef LOG_LOW
@@ -971,7 +976,7 @@ private:
 				std::cout << "Path " << i << " in the solution, could not found" << std::endl;
 				#endif
 				continue;
-		}
+			}
 
 			const auto& first = this->finalSolution->solution[i]->nodes[0];
 			const auto& last = this->finalSolution->solution[i]->nodes.back();
@@ -1079,7 +1084,14 @@ private:
 			auto best = resolveBestPathEdge(sourcePath, destinationEndpoint.coordinate, node, cat, constraints);
 			if (std::get<0>(best) == false) return nullptr;
 
-			PFGoal goal{ destinationEndpoint.coordinate, { BeltType::Conveyor, BeltType::UndergroundEntrance, BeltType::UndergroundExit }, {} };
+			PFGoal goal{
+				destinationEndpoint.coordinate,
+				static_cast<uint8_t>(BeltType::Conveyor) |
+				static_cast<uint8_t>(BeltType::UndergroundEntrance) |
+				static_cast<uint8_t>(BeltType::UndergroundExit),
+				0
+			};
+
 			return new PFState(blockedGrid, node->constraints[pathIndex], goal, PFData{ std::get<1>(best), BeltType::Inserter, std::get<2>(best) });
 		}
 
@@ -1096,7 +1108,13 @@ private:
 			auto best = resolveBestPathEdge(destinationPath, sourceEndpoint.coordinate, node, cat, constraints);
 			if (std::get<0>(best) == false) return nullptr;
 
-			PFGoal goal{ std::get<1>(best), { BeltType::Conveyor, BeltType::UndergroundExit }, { dirOpposite(std::get<2>(best)) } };
+			PFGoal goal{
+				std::get<1>(best),
+				static_cast<uint8_t>(BeltType::Conveyor) |
+				static_cast<uint8_t>(BeltType::UndergroundExit),
+				static_cast<uint8_t>(dirOpposite(std::get<2>(best)))
+			};
+
 			return new PFState(blockedGrid, node->constraints[pathIndex], goal, PFData{ sourceEndpoint.coordinate, BeltType::None, Direction::N });
 		}
 
@@ -1109,7 +1127,13 @@ private:
 		if (std::any_of(constraints.begin(), constraints.end(), [&](const CATEntry& entry) { return checkCATEntryConflict(entry, sourceCATEntry) || checkCATEntryConflict(entry, destinationCATEntry); })) return nullptr;
 		if (cat.checkConflict(sourceCATEntry) || cat.checkConflict(destinationCATEntry)) return nullptr;
 
-		PFGoal goal{ destinationEndpoint.coordinate, { BeltType::Conveyor, BeltType::UndergroundEntrance, BeltType::UndergroundExit}, {} };
+		PFGoal goal{
+			destinationEndpoint.coordinate,
+			static_cast<uint8_t>(BeltType::Conveyor) |
+			static_cast<uint8_t>(BeltType::UndergroundEntrance) |
+			static_cast<uint8_t>(BeltType::UndergroundExit),
+			0
+		};
 		return new PFState(blockedGrid, node->constraints[pathIndex], goal, PFData{ sourceEndpoint.coordinate, BeltType::None, Direction::N });
 	}
 
@@ -1130,7 +1154,7 @@ private:
 				const Coordinate& coord = nodeData.coordinate;
 				for (int j = 0; j < 4; j++)
 				{
-					Direction dir = static_cast<Direction>(j);
+					Direction dir = static_cast<Direction>(1 << j);
 					Coordinate offset = dirOffset(dir);
 
 					Coordinate newCoord = { coord.x + offset.x, coord.y + offset.y };
@@ -1166,7 +1190,7 @@ private:
 
 		return { found, bestCoord, bestDir };
 	}
-};
+		};
 
 class LSState : public ls::State<LSState>
 {
@@ -1280,7 +1304,7 @@ public:
 			// Neighbour for moving each assembler in each direction
 			for (int j = 0; j < 4; j++)
 			{
-				Direction dir = static_cast<Direction>(j);
+				Direction dir = static_cast<Direction>(1 << j);
 				Coordinate offset = dirOffset(dir);
 				Coordinate newCoord = { assembler.coordinate.x + offset.x, assembler.coordinate.y + offset.y };
 
@@ -1506,7 +1530,7 @@ private:
 	}
 };
 
-std::unordered_map<size_t, std::vector<PFData>> PFState::neighbourCache = std::unordered_map<size_t, std::vector<PFData>>();
+std::unordered_map<size_t, std::vector<std::pair<PFData, CATEntry>>> PFState::neighbourCache = std::unordered_map<size_t, std::vector<std::pair<PFData, CATEntry>>>();
 std::map<size_t, std::shared_ptr<LSState>> LSState::cachedStates = std::map<size_t, std::shared_ptr<LSState>>();
 size_t LSState::evaluationCount = 0;
 size_t CBPathfinder::evaluationCount = 0;
@@ -1913,7 +1937,7 @@ void checkPathfinding()
 		{ false, false, true, true, false, false, false },
 		{ false, false, false, false, false, true, false } };
 	std::vector<CATEntry> constraints{};
-	PFGoal goal{ Coordinate{ 2, 6 }, {}, {} };
+	PFGoal goal{ Coordinate{ 2, 6 }, 0, 0 };
 
 	// Make initial state and perform pathfinding
 	auto initialState = new PFState(blockedGrid, constraints, goal, PFData{ Coordinate{ 0, 0 }, BeltType::None, Direction::E });

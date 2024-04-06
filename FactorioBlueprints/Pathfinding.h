@@ -120,8 +120,7 @@ namespace pf
 				if (closedHashSet.find(neighbourHash) != closedHashSet.end()) continue;
 				if (openHashSet.find(neighbourHash) != openHashSet.end()) continue;
 
-				D neighbourData = *neighbourDataPtr;
-				T* neighbour = new T(neighbourData, current);
+				T* neighbour = new T(*neighbourDataPtr, current);
 				allNodes.push_back(neighbour);
 				openSet.push(neighbour);
 				openHashSet.insert(neighbour->getDataHash());
