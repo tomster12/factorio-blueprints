@@ -27,6 +27,7 @@ namespace pf
 		virtual bool isGoal() = 0;
 		virtual std::vector<std::shared_ptr<T>> getNeighbours() = 0;
 		virtual std::shared_ptr<T> getParent() const { return parent; }
+		virtual size_t getHash() const = 0;
 
 	protected:
 		State(std::shared_ptr<T> parent = nullptr) : parent(parent) {}
@@ -42,16 +43,16 @@ namespace pf
 	};
 
 	template<typename T>
-	Path<T> asPathfinding(std::shared_ptr<T> start, bool toLog = false)
+	std::shared_ptr<Path<T>> asPathfinding(std::shared_ptr<T> start, bool toLog = false)
 	{
 		static_assert(std::is_base_of<State<T>, T>::value, "T must be a subclass of State<T>.");
 		T::evaluationCount++;
 
 		// Start open set with start node
-		// Changed from std::set to std::vector to ensure deterministic outcome
-		std::vector<std::shared_ptr<T>> closedSet;//std::set<std::shared_ptr<T>> closedSet;
-		std::vector<std::shared_ptr<T>> openSet;//std::set<std::shared_ptr<T>> openSet;
-		openSet.push_back(start);//openSet.insert(start);
+		// Vector used so it is deterministic
+		std::vector<size_t> closedSet;
+		std::vector<std::shared_ptr<T>> openSet;
+		openSet.push_back(start);
 
 		// Until open set is empty
 		while (!openSet.empty())
@@ -69,38 +70,41 @@ namespace pf
 			// Found goal
 			if (current->isGoal())
 			{
-				std::vector<std::shared_ptr<T>> path;
-				float cost = 0.0f;
+				std::shared_ptr<Path<T>> pathPtr = std::make_shared<Path<T>>();
+				pathPtr->found = true;
 
 				std::shared_ptr<T> node = current;
 				while (node != nullptr)
 				{
-					path.push_back(node);
-					cost += node->getGCost();
+					pathPtr->nodes.push_back(node);
+					pathPtr->cost += node->getGCost();
 					node = node->getParent();
 				}
-				std::reverse(path.begin(), path.end());
+				std::reverse(pathPtr->nodes.begin(), pathPtr->nodes.end());
 
-				return { true, path, cost };
+				return pathPtr;
 			}
 
-			openSet.erase(std::remove(openSet.begin(), openSet.end(), current), openSet.end());//openSet.erase(current);
-			closedSet.push_back(current);//closedSet.insert(current);
+			openSet.erase(std::remove(openSet.begin(), openSet.end(), current), openSet.end());
+			closedSet.push_back(current->getHash());
 
 			// Add neighbours to open if not in open or closed set
 			for (std::shared_ptr<T> neighbour : current->getNeighbours())
 			{
-				if (std::find_if(closedSet.begin(), closedSet.end(), [&neighbour](const std::shared_ptr<T>& node) { return *node == *neighbour; }) != closedSet.end())
+				size_t neighbourHash = neighbour->getHash();
+				if (std::find_if(closedSet.begin(), closedSet.end(), [&neighbourHash](size_t hash) { return hash == neighbourHash; }) != closedSet.end())
 				{
 					continue;
 				}
 				if (std::find_if(openSet.begin(), openSet.end(), [&neighbour](const std::shared_ptr<T>& node) { return *node == *neighbour; }) == openSet.end())
 				{
-					openSet.push_back(neighbour);//openSet.insert(neighbour);
+					openSet.push_back(neighbour);
 				}
 			}
 		}
 
-		return { false, {}, -1.0f };
+		std::shared_ptr<Path<T>> pathPtr = std::make_shared<Path<T>>();
+		pathPtr->found = false;
+		return pathPtr;
 	}
 }
