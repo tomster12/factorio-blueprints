@@ -1,6 +1,9 @@
 #pragma once
 
 #include <algorithm>
+#include <queue>
+#include <unordered_set>
+#include <deque>
 
 namespace pf
 {
@@ -14,97 +17,121 @@ namespace pf
 		return static_cast<float>(abs(x2 - x1) + abs(y2 - y1));
 	}
 
-	template<typename T>
+	// T = State { State }
+	// D = Data { hash, ... }
+	template<typename T, typename D>
 	class State
 	{
 	public:
 		static size_t evaluationCount;
 
-		virtual bool operator==(T& other) const = 0;
+		State(D data, T* parent)
+			: data(data), parent(parent), dataHash(data.getHash())
+		{}
+
+		bool operator==(T& other) const { dataHash = other.dataHash; }
+
+		virtual bool isGoal() = 0;
 		virtual float getFCost() = 0;
 		virtual float getGCost() = 0;
 		virtual float getHCost() = 0;
-		virtual bool isGoal() = 0;
-		virtual std::vector<std::shared_ptr<T>> getNeighbours() = 0;
-		virtual std::shared_ptr<T> getParent() const { return parent; }
-		virtual size_t getHash() const = 0;
+		virtual std::vector<D*> getNeighbours() = 0;
+
+		const D& getData() const { return data; }
+		D moveData() { return std::move(data); }
+		size_t getDataHash() const { return dataHash; }
+		T* getParent() const { return parent; }
 
 	protected:
-		State(std::shared_ptr<T> parent = nullptr) : parent(parent) {}
-		std::shared_ptr<T> parent;
+		D data;
+		size_t dataHash;
+		T* parent;
 	};
 
-	template<typename T>
+	template<typename D>
 	struct Path
 	{
 		bool found;
-		std::vector<std::shared_ptr<T>> nodes;
+		std::vector<D> nodes;
 		float cost;
 	};
 
-	template<typename T>
-	std::shared_ptr<Path<T>> asPathfinding(std::shared_ptr<T> start, bool toLog = false)
+	struct CompareNodeByFCost
 	{
-		static_assert(std::is_base_of<State<T>, T>::value, "T must be a subclass of State<T>.");
+		template<typename T>
+		bool operator()(T* a, T* b) const
+		{
+			return a->getFCost() > b->getFCost(); // Assuming lower f cost is better
+		}
+	};
+
+	template<typename T, typename D>
+	std::shared_ptr<Path<D>> asPathfinding(T* start, bool toLog = false)
+	{
 		T::evaluationCount++;
 
 		// Start open set with start node
-		// Vector used so it is deterministic
-		std::vector<size_t> closedSet;
-		std::vector<std::shared_ptr<T>> openSet;
-		openSet.push_back(start);
+		std::priority_queue<T*, std::vector<T*>, CompareNodeByFCost> openSet;
+		std::unordered_set<size_t> closedHashSet;
+		std::unordered_set<size_t> openHashSet;
+		std::deque<T*> allNodes;
+
+		allNodes.push_back(start);
+		openSet.push(start);
+		openHashSet.insert(start->getDataHash());
 
 		// Until open set is empty
 		while (!openSet.empty())
 		{
 			// Get node with lowest f cost
-			std::shared_ptr<T> current = *openSet.begin();
-			for (const auto& node : openSet)
-			{
-				if (node->getFCost() < current->getFCost())
-				{
-					current = node;
-				}
-			}
+			T* current = openSet.top();
+			openSet.pop();
 
 			// Found goal
 			if (current->isGoal())
 			{
-				std::shared_ptr<Path<T>> pathPtr = std::make_shared<Path<T>>();
-				pathPtr->found = true;
+				std::shared_ptr<Path<D>> path = std::make_shared<Path<D>>();
 
-				std::shared_ptr<T> node = current;
+				T* node = current;
 				while (node != nullptr)
 				{
-					pathPtr->nodes.push_back(node);
-					pathPtr->cost += node->getGCost();
+					path->nodes.push_back(node->moveData());
+					path->cost += node->getGCost();
 					node = node->getParent();
 				}
-				std::reverse(pathPtr->nodes.begin(), pathPtr->nodes.end());
+				std::reverse(path->nodes.begin(), path->nodes.end());
+				path->found = true;
 
-				return pathPtr;
+				// Cleanup and return with path
+				for (T* node : allNodes) delete node;
+				return path;
 			}
 
-			openSet.erase(std::remove(openSet.begin(), openSet.end(), current), openSet.end());
-			closedSet.push_back(current->getHash());
+			// Delete current and remove from open set
+			openHashSet.erase(current->getDataHash());
+			closedHashSet.insert(current->getDataHash());
 
 			// Add neighbours to open if not in open or closed set
-			for (std::shared_ptr<T> neighbour : current->getNeighbours())
+			const auto neighbours = current->getNeighbours();
+			for (const auto& neighbourDataPtr : neighbours)
 			{
-				size_t neighbourHash = neighbour->getHash();
-				if (std::find_if(closedSet.begin(), closedSet.end(), [&neighbourHash](size_t hash) { return hash == neighbourHash; }) != closedSet.end())
-				{
-					continue;
-				}
-				if (std::find_if(openSet.begin(), openSet.end(), [&neighbour](const std::shared_ptr<T>& node) { return *node == *neighbour; }) == openSet.end())
-				{
-					openSet.push_back(neighbour);
-				}
+				const size_t neighbourHash = neighbourDataPtr->getHash();
+
+				if (closedHashSet.find(neighbourHash) != closedHashSet.end()) continue;
+				if (openHashSet.find(neighbourHash) != openHashSet.end()) continue;
+
+				D neighbourData = *neighbourDataPtr;
+				T* neighbour = new T(neighbourData, current);
+				allNodes.push_back(neighbour);
+				openSet.push(neighbour);
+				openHashSet.insert(neighbour->getDataHash());
 			}
 		}
 
-		std::shared_ptr<Path<T>> pathPtr = std::make_shared<Path<T>>();
-		pathPtr->found = false;
-		return pathPtr;
+		// Cleanup and return without path
+		for (T* node : allNodes) delete node;
+		std::shared_ptr<Path<D>> path = std::make_shared<Path<D>>();
+		path->found = false;
+		return path;
 	}
 }

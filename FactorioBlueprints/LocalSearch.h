@@ -171,7 +171,7 @@ namespace ls
 		}
 
 		#ifdef LOG_LS
-		std::cout << "Finished " << it << " iterations, fitness: " << best->getFitness() << ", states evaluated: " << T::getCacheSize() << std::endl << std::endl;
+		std::cout << "Finished " << it << " iterations, fitness: " << best->getFitness() << ", states seen: " << T::getCacheSize() << std::endl << std::endl;
 		#endif
 
 		return best;

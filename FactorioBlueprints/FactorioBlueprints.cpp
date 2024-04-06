@@ -9,6 +9,7 @@
 #include <stack>
 #include <string>
 #include <cassert>
+#include <unordered_map>
 
 #define LOG_SOLVER
 // #define LOG_LOW
@@ -17,12 +18,12 @@
 #include "LocalSearch.h"
 #include "Pathfinding.h"
 
-#define SRAND_SEED 0
-#define USE_LOGGER
+#define SRAND_SEED 1
+// #define USE_LOGGER
 #define LOG_PREFIX "p2_full_"
 #define USE_ANNEALING
 #define ANNEALING_TEMP 2.0f
-#define ANNEALING_COOLING 0.004f
+#define ANNEALING_COOLING 0.005f
 #define ANNEALING_ITERATIONS 1000
 #define HILLCLIMBING_ITERATIONS 1000
 
@@ -173,6 +174,53 @@ private:
 
 // ------------------------------------------------
 
+class PFState;
+
+struct PFGoal
+{
+public:
+	PFGoal() : isValid(false) {}
+
+	PFGoal(Coordinate coordinate, std::set<BeltType> types, std::set<Direction> directions)
+		: coordinate(coordinate), types(types), directions(directions), isValid(true)
+	{}
+
+	bool isValid = false;
+	Coordinate coordinate;
+	std::set<BeltType> types;
+	std::set<Direction> directions;
+};
+
+struct PFData
+{
+	Coordinate coordinate;
+	BeltType type;
+	Direction direction;
+
+	size_t getHash() const
+	{
+		std::hash<size_t> hasher;
+		return hasher(coordinate.x) ^ (hasher(coordinate.y) << 1) ^ (hasher(static_cast<int>(type)) << 2) ^ (hasher(static_cast<int>(direction)) << 3);
+	}
+
+	void print() const
+	{
+		std::string typeStr = type == BeltType::None ? "None" :
+			type == BeltType::Conveyor ? "Conveyor" :
+			type == BeltType::UndergroundEntrance ? "UndergroundEntrance" :
+			type == BeltType::Underground ? "Underground" :
+			type == BeltType::UndergroundExit ? "UndergroundExit" :
+			type == BeltType::Inserter ? "Inserter"
+			: "Unknown";
+		std::cout << "[ (" << coordinate.x << ", " << coordinate.y << ") " << dirString(direction) << " | " << typeStr << " ]" << std::endl;
+	}
+
+	bool isAboveGround() const
+	{
+		return type == BeltType::Conveyor || type == BeltType::UndergroundEntrance || type == BeltType::UndergroundExit;
+	}
+};
+
 struct CATEntry
 {
 	size_t coordinateHash;
@@ -236,10 +284,7 @@ public:
 	{
 		if (table.find(entry.coordinateHash) == table.end())
 		{
-			table[entry.coordinateHash] = std::vector<std::set<size_t>>();
-			table[entry.coordinateHash].push_back({});
-			table[entry.coordinateHash].push_back({});
-			table[entry.coordinateHash].push_back({});
+			table[entry.coordinateHash] = { {}, {}, {} };
 		}
 
 		if (entry.conflictFlags & 0b001) table[entry.coordinateHash][0].insert(pathIndex);
@@ -295,66 +340,30 @@ private:
 	std::map<size_t, std::vector<std::set<size_t>>> table;
 };
 
-// ------------------------------------------------
-
-class PFState;
-
-struct PFGoal
+class PFState : public pf::State<PFState, PFData>
 {
 public:
-	PFGoal() : isValid(false) {}
-
-	PFGoal(Coordinate coordinate, std::set<BeltType> types, std::set<Direction> directions)
-		: coordinate(coordinate), types(types), directions(directions), isValid(true)
+	PFState(const std::vector<std::vector<bool>>& blockedGrid, const std::vector<CATEntry>& constraints, PFGoal goal, PFData data)
+		: blockedGrid(blockedGrid), constraints(constraints), goal(goal), pf::State<PFState, PFData>(data, nullptr)
 	{}
 
-	bool isValid = false;
-	Coordinate coordinate;
-	std::set<BeltType> types;
-	std::set<Direction> directions;
-};
+	PFState(PFData data, PFState* parent)
+		: pf::State<PFState, PFData>(data, parent), blockedGrid(parent->blockedGrid), constraints(parent->constraints), goal(parent->goal)
+	{}
 
-class PFState : public pf::State<PFState>
-{
-public:
-	PFState(
-		const std::vector<std::vector<bool>>& blockedGrid, const std::vector<CATEntry>& constraints, PFGoal goal,
-		Coordinate coordinate, BeltType type, Direction direction,
-		std::shared_ptr<PFState> parent = nullptr)
-		: blockedGrid(blockedGrid), constraints(constraints), goal(goal),
-		coordinate(coordinate), type(type), direction(direction),
-		pf::State<PFState>(parent)
+	bool isGoal() override
 	{
-		// Calculate hash for comparison
-		std::hash<size_t> hasher;
-		hash = hasher(coordinate.x) ^ (hasher(coordinate.y) << 1) ^ (hasher(static_cast<int>(type)) << 2) ^ (hasher(static_cast<int>(direction)) << 3);
-
-		// Calculate if above ground
-		aboveGround = type == BeltType::Conveyor || type == BeltType::UndergroundEntrance || type == BeltType::UndergroundExit;
-
-		// Calculate CAT entry
-		catEntry = calculateCATEntry(coordinate, type, direction);
-	}
-
-	bool operator==(PFState& other) const
-	{
-		return hash == other.hash;
-	}
-
-	CATEntry getCATEntry() const
-	{
-		return catEntry;
-	}
-
-	size_t getHash() const override
-	{
-		return hash;
+		bool match = true;
+		match &= data.coordinate.x == goal.coordinate.x && data.coordinate.y == goal.coordinate.y;
+		if (goal.types.size() > 0) match &= goal.types.find(data.type) != goal.types.end();
+		if (goal.directions.size() > 0) match &= goal.directions.find(data.direction) != goal.directions.end();
+		return match;
 	}
 
 	float getFCost() override
 	{
 		calculateCosts();
-		return gCost + hCost;
+		return fCost;
 	}
 
 	float getGCost() override
@@ -369,47 +378,30 @@ public:
 		return hCost;
 	}
 
-	std::vector<std::shared_ptr<PFState>> getNeighbours() override
+	std::vector<PFData*> getNeighbours() override
 	{
 		calculateNeighbourCache();
 
-		// Calculate all neighbours using cache that arent blocked or conflict
-		std::vector<std::shared_ptr<PFState>> neighbours = std::vector<std::shared_ptr<PFState>>();
-		auto thisPtr = std::make_shared<PFState>(*this);
+		// Calculate viable neighbours from cache that arent blocked or conflict
+		std::vector<PFData*> neighbours;
+		neighbours.reserve(neighbourCache[dataHash].size());
 
-		for (const NeighbourData& neighbourData : neighbourCache[hash])
+		for (size_t i = 0; i < neighbourCache[dataHash].size(); i++)
 		{
-			if (blockedGrid[neighbourData.coordinate.x][neighbourData.coordinate.y] && (neighbourData.type != BeltType::None && neighbourData.type != BeltType::Underground)) continue;
-			CATEntry neighbourEntry = calculateCATEntry(neighbourData.coordinate, neighbourData.type, neighbourData.direction);
-			if (std::find_if(constraints.begin(), constraints.end(), [&](const auto& constraint) { return checkCATEntryConflict(constraint, neighbourEntry); }) != constraints.end()) continue;
-			neighbours.push_back(std::make_shared<PFState>(blockedGrid, constraints, goal, neighbourData.coordinate, neighbourData.type, neighbourData.direction, thisPtr));
-		}
+			const PFData& neighbourData = neighbourCache[dataHash][i];
 
+			if (blockedGrid[neighbourData.coordinate.x][neighbourData.coordinate.y] && (neighbourData.type != BeltType::None && neighbourData.type != BeltType::Underground)) continue;
+			const CATEntry neighbourEntry = calculateCATEntry(neighbourData.coordinate, neighbourData.type, neighbourData.direction);
+			if (std::find_if(constraints.begin(), constraints.end(), [&](const auto& constraint) { return checkCATEntryConflict(constraint, neighbourEntry); }) != constraints.end()) continue;
+
+			neighbours.push_back(&neighbourCache[dataHash][i]);
+		}
 		return neighbours;
 	}
 
-	bool isAboveGround() const
-	{
-		return aboveGround;
-	}
-
-	Coordinate getCoordinate() const
-	{
-		return coordinate;
-	}
-
-	PFGoal getGoal() const
+	const PFGoal& getGoal() const
 	{
 		return goal;
-	}
-
-	bool isGoal() override
-	{
-		bool match = true;
-		match &= coordinate.x == goal.coordinate.x && coordinate.y == goal.coordinate.y;
-		if (goal.types.size() > 0) match &= goal.types.find(type) != goal.types.end();
-		if (goal.directions.size() > 0) match &= goal.directions.find(direction) != goal.directions.end();
-		return match;
 	}
 
 	bool conflictsWithConstraints() const
@@ -417,47 +409,20 @@ public:
 		// Check if any entry in constraints conflicts with this state
 		for (const CATEntry& entry : constraints)
 		{
-			if (checkCATEntryConflict(entry, catEntry)) return true;
+			if (checkCATEntryConflict(entry, calculateCATEntry(data.coordinate, data.type, data.direction))) return true;
 		}
 		return false;
 	}
 
-	void print()
-	{
-		std::string typeStr = type == BeltType::None ? "None" :
-			type == BeltType::Conveyor ? "Conveyor" :
-			type == BeltType::UndergroundEntrance ? "UndergroundEntrance" :
-			type == BeltType::Underground ? "Underground" :
-			type == BeltType::UndergroundExit ? "UndergroundExit" :
-			type == BeltType::Inserter ? "Inserter"
-			: "Unknown";
-		std::cout << "[ (" << coordinate.x << ", " << coordinate.y << ") " << dirString(direction) << " | " << typeStr << " ]" << std::endl;
-	}
-
 private:
-	struct NeighbourData
-	{
-		Coordinate coordinate;
-		BeltType type;
-		Direction direction;
-	};
 
-	static std::map<size_t, std::vector<NeighbourData>> neighbourCache;
+	static std::unordered_map<size_t, std::vector<PFData>> neighbourCache;
 
 	const std::vector<std::vector<bool>>& blockedGrid;
 	const std::vector<CATEntry>& constraints;
 	PFGoal goal;
-
-	Coordinate coordinate;
-	BeltType type;
-	Direction direction;
-	size_t hash;
-	bool aboveGround;
-	CATEntry catEntry;
-
 	bool costCalculated = false;
-	float gCost = 0.0f;
-	float hCost = 0.0f;
+	float fCost = 0.0f, gCost = 0.0f, hCost = 0.0f;
 
 	void calculateCosts()
 	{
@@ -466,90 +431,92 @@ private:
 		if (parent == nullptr) gCost = 0.0f;
 		else
 		{
-			float coordDist = pf::ManhattanDistance((float)coordinate.x, (float)coordinate.y, (float)parent->coordinate.x, (float)parent->coordinate.y);
-			if ((type == BeltType::Underground) || (parent->type == BeltType::Underground)) coordDist *= 0.5f;
+			float coordDist = pf::ManhattanDistance((float)data.coordinate.x, (float)data.coordinate.y, (float)parent->data.coordinate.x, (float)parent->data.coordinate.y);
+			if ((data.type == BeltType::Underground) || (parent->data.type == BeltType::Underground)) coordDist *= 0.5f;
 			gCost = parent->gCost + coordDist;
 		}
 
-		hCost = pf::ManhattanDistance((float)coordinate.x, (float)coordinate.y, (float)goal.coordinate.x, (float)goal.coordinate.y);
+		hCost = pf::ManhattanDistance((float)data.coordinate.x, (float)data.coordinate.y, (float)goal.coordinate.x, (float)goal.coordinate.y);
+
+		fCost = gCost + hCost;
 
 		costCalculated = true;
 	}
 
 	void calculateNeighbourCache()
 	{
-		if (neighbourCache.find(hash) == neighbourCache.end())
+		if (neighbourCache.find(dataHash) == neighbourCache.end())
 		{
-			neighbourCache[hash] = std::vector<NeighbourData>();
+			neighbourCache[dataHash] = std::vector<PFData>();
 
-			if (type == BeltType::None)
+			if (data.type == BeltType::None)
 			{
 				for (int i = 0; i < 4; i++)
 				{
 					Direction newDirection = static_cast<Direction>(i);
-					neighbourCache[hash].push_back({ coordinate, BeltType::Conveyor, newDirection });
-					neighbourCache[hash].push_back({ coordinate, BeltType::UndergroundEntrance, newDirection });
+					neighbourCache[dataHash].push_back({ data.coordinate, BeltType::Conveyor, newDirection });
+					neighbourCache[dataHash].push_back({ data.coordinate, BeltType::UndergroundEntrance, newDirection });
 				}
 			}
 
-			else if (type == BeltType::Conveyor)
+			else if (data.type == BeltType::Conveyor)
 			{
 				for (int i = 0; i < 4; i++)
 				{
 					Direction newDirection = static_cast<Direction>(i);
 					Coordinate offset = dirOffset(newDirection);
-					Coordinate newCoord = { coordinate.x + offset.x, coordinate.y + offset.y };
+					Coordinate newCoord = { data.coordinate.x + offset.x, data.coordinate.y + offset.y };
 					if (newCoord.x < 0 || newCoord.x >= blockedGrid.size() || newCoord.y < 0 || newCoord.y >= blockedGrid[0].size()) continue;
-					neighbourCache[hash].push_back({ newCoord, BeltType::Conveyor, newDirection });
-					neighbourCache[hash].push_back({ newCoord, BeltType::UndergroundEntrance, newDirection });
+					neighbourCache[dataHash].push_back({ newCoord, BeltType::Conveyor, newDirection });
+					neighbourCache[dataHash].push_back({ newCoord, BeltType::UndergroundEntrance, newDirection });
 				}
 			}
 
-			else if (type == BeltType::UndergroundEntrance)
+			else if (data.type == BeltType::UndergroundEntrance)
 			{
-				Coordinate offset = dirOffset(direction);
-				Coordinate newCoord = { coordinate.x + offset.x, coordinate.y + offset.y };
+				Coordinate offset = dirOffset(data.direction);
+				Coordinate newCoord = { data.coordinate.x + offset.x, data.coordinate.y + offset.y };
 				if (newCoord.x >= 0 && newCoord.x < blockedGrid.size() && newCoord.y >= 0 && newCoord.y < blockedGrid[0].size())
 				{
-					neighbourCache[hash].push_back({ newCoord, BeltType::Underground, direction });
-					neighbourCache[hash].push_back({ newCoord, BeltType::UndergroundExit, direction });
+					neighbourCache[dataHash].push_back({ newCoord, BeltType::Underground, data.direction });
+					neighbourCache[dataHash].push_back({ newCoord, BeltType::UndergroundExit, data.direction });
 				}
 			}
 
-			else if (type == BeltType::Underground)
+			else if (data.type == BeltType::Underground)
 			{
-				Coordinate offset = dirOffset(direction);
-				Coordinate newCoord = { coordinate.x + offset.x, coordinate.y + offset.y };
+				Coordinate offset = dirOffset(data.direction);
+				Coordinate newCoord = { data.coordinate.x + offset.x, data.coordinate.y + offset.y };
 				if (newCoord.x >= 0 && newCoord.x < blockedGrid.size() && newCoord.y >= 0 && newCoord.y < blockedGrid[0].size())
 				{
-					neighbourCache[hash].push_back({ newCoord, BeltType::Underground, direction });
-					neighbourCache[hash].push_back({ newCoord, BeltType::UndergroundExit, direction });
+					neighbourCache[dataHash].push_back({ newCoord, BeltType::Underground, data.direction });
+					neighbourCache[dataHash].push_back({ newCoord, BeltType::UndergroundExit, data.direction });
 				}
 			}
 
-			else if (type == BeltType::UndergroundExit)
+			else if (data.type == BeltType::UndergroundExit)
 			{
-				Coordinate offset = dirOffset(direction);
-				Coordinate newCoord = { coordinate.x + offset.x, coordinate.y + offset.y };
+				Coordinate offset = dirOffset(data.direction);
+				Coordinate newCoord = { data.coordinate.x + offset.x, data.coordinate.y + offset.y };
 				if (newCoord.x >= 0 && newCoord.x < blockedGrid.size() && newCoord.y >= 0 && newCoord.y < blockedGrid[0].size())
 				{
-					neighbourCache[hash].push_back({ newCoord, BeltType::Conveyor, direction });
-					neighbourCache[hash].push_back({ newCoord, BeltType::UndergroundEntrance, direction });
+					neighbourCache[dataHash].push_back({ newCoord, BeltType::Conveyor, data.direction });
+					neighbourCache[dataHash].push_back({ newCoord, BeltType::UndergroundEntrance, data.direction });
 				}
 			}
 
-			else if (type == BeltType::Inserter)
+			else if (data.type == BeltType::Inserter)
 			{
-				Coordinate offset = dirOffset(direction);
-				Coordinate newCoord = { coordinate.x + offset.x, coordinate.y + offset.y };
+				Coordinate offset = dirOffset(data.direction);
+				Coordinate newCoord = { data.coordinate.x + offset.x, data.coordinate.y + offset.y };
 				if (newCoord.x >= 0 && newCoord.x < blockedGrid.size() && newCoord.y >= 0 && newCoord.y < blockedGrid[0].size())
 				{
 					for (int i = 0; i < 4; i++)
 					{
 						Direction newDirection = Direction(i);
-						if (direction == dirOpposite(newDirection)) continue;
-						neighbourCache[hash].push_back({ newCoord, BeltType::Conveyor, newDirection });
-						neighbourCache[hash].push_back({ newCoord, BeltType::UndergroundEntrance, newDirection });
+						if (data.direction == dirOpposite(newDirection)) continue;
+						neighbourCache[dataHash].push_back({ newCoord, BeltType::Conveyor, newDirection });
+						neighbourCache[dataHash].push_back({ newCoord, BeltType::UndergroundEntrance, newDirection });
 					}
 				}
 			}
@@ -613,9 +580,9 @@ public:
 	{
 		bool isValid = true;
 		std::vector<size_t> pathsToCalculate{};
-		CTConflict foundConflict;
+		CTConflict foundConflict{};
 		std::map<size_t, std::vector<CATEntry>> constraints{};
-		std::map<size_t, std::shared_ptr<pf::Path<PFState>>> solution{};
+		std::map<size_t, std::shared_ptr<pf::Path<PFData>>> solution{};
 		float cost = 0.0f;
 	};
 
@@ -688,10 +655,10 @@ public:
 			std::cout << ", cost: " << path->cost;
 			std::cout << ", nodes: " << path->nodes.size() << std::endl;
 
-			for (const auto& node : path->nodes)
+			for (const auto& nodeData : path->nodes)
 			{
 				std::cout << "- ";
-				node->print();
+				nodeData.print();
 			}
 		}
 
@@ -906,9 +873,16 @@ private:
 		std::cout << "--- CB Pathfinding ---" << std::endl << std::endl;
 		#endif
 
+		// NOTES
+		//
 		// A CTNode will be invalid if a path config cannot be resolved
 		// The openSet will eventually be empty if all the CTNodes end up invalid
 		// It is possible for a solution with no conflicts, but some paths not found
+		//
+		// Recreating the CAT each time in calculateNode is tradeoff between memory and CPU
+		// - Copying the CAT over could actually be slower eitherway
+		// Potentially need to look at the tradeoff between holding all constraints and copying
+		// - These are very small structs so likely not an issue
 
 		// Initialize root and early exit if invalid
 		auto root = std::make_shared<CTNode>();
@@ -918,6 +892,7 @@ private:
 		if (!root->isValid) return;
 
 		// Initialize open set
+		std::set<size_t> closedSet;
 		std::vector<std::shared_ptr<CTNode>> openSet;
 		openSet.push_back(root);
 
@@ -927,7 +902,7 @@ private:
 		{
 			// Pop the node with the lowest cost
 			auto current = openSet[0];
-			for (auto node : openSet)
+			for (const auto& node : openSet)
 			{
 				if (node->cost < current->cost) current = node;
 			}
@@ -964,6 +939,8 @@ private:
 				// Set the path to calculate and add the constraint
 				next->pathsToCalculate = { pathIndex };
 				next->constraints[pathIndex].push_back(current->foundConflict.catEntry);
+
+				// Calculate the node and add to open set if valid
 				calculateNode(next);
 				if (next->isValid) openSet.push_back(next);
 			}
@@ -978,7 +955,7 @@ private:
 
 			fitness = 0.0f;
 			return;
-		}
+}
 
 		// Solution found, fitness = sum (1 + shortest / real)
 		#ifdef LOG_LOW
@@ -994,9 +971,11 @@ private:
 				std::cout << "Path " << i << " in the solution, could not found" << std::endl;
 				#endif
 				continue;
-			}
+		}
 
-			float shortest = this->finalSolution->solution[i]->nodes[0]->getHCost();
+			const auto& first = this->finalSolution->solution[i]->nodes[0];
+			const auto& last = this->finalSolution->solution[i]->nodes.back();
+			float shortest = pf::ManhattanDistance((float)first.coordinate.x, (float)first.coordinate.y, (float)last.coordinate.x, (float)last.coordinate.y);
 			float real = this->finalSolution->solution[i]->cost;
 
 			// Its possible with underground belts to have a lower cost, but cap it to max
@@ -1048,7 +1027,7 @@ private:
 			if (std::find(calculateOrder.begin(), calculateOrder.end(), i) == calculateOrder.end())
 			{
 				node->cost += node->solution[i]->cost;
-				for (const auto& entry : node->solution[i]->nodes) cat.addPath(i, entry->getCATEntry());
+				for (const auto& nodeData : node->solution[i]->nodes) cat.addPath(i, calculateCATEntry(nodeData.coordinate, nodeData.type, nodeData.direction));
 			}
 		}
 
@@ -1057,10 +1036,9 @@ private:
 		{
 			auto source = resolvePathConfig(pathIndex, node, cat);
 			if (source == nullptr) return;
-
-			node->solution[pathIndex] = pf::asPathfinding<PFState>(source, true);
+			node->solution[pathIndex] = pf::asPathfinding<PFState, PFData>(source, true);
 			node->cost += node->solution[pathIndex]->cost;
-			for (const auto& entry : node->solution[pathIndex]->nodes) cat.addPath(pathIndex, entry->getCATEntry());
+			for (const auto& nodeData : node->solution[pathIndex]->nodes) cat.addPath(pathIndex, calculateCATEntry(nodeData.coordinate, nodeData.type, nodeData.direction));
 		}
 
 		// Find conflict for node and update
@@ -1081,7 +1059,7 @@ private:
 		node->isValid = true;
 	}
 
-	std::shared_ptr<PFState> resolvePathConfig(size_t pathIndex, const std::shared_ptr<CTNode>& node, const ConflictAvoidanceTable& cat)
+	PFState* resolvePathConfig(size_t pathIndex, const std::shared_ptr<CTNode>& node, const ConflictAvoidanceTable& cat)
 	{
 		// Attempt to resolve the path considering the given node
 		// Return nullptr is conflicts and constraints prevent resolution
@@ -1102,7 +1080,7 @@ private:
 			if (std::get<0>(best) == false) return nullptr;
 
 			PFGoal goal{ destinationEndpoint.coordinate, { BeltType::Conveyor, BeltType::UndergroundEntrance, BeltType::UndergroundExit }, {} };
-			return std::make_shared<PFState>(blockedGrid, node->constraints[pathIndex], goal, std::get<1>(best), BeltType::Inserter, std::get<2>(best));
+			return new PFState(blockedGrid, node->constraints[pathIndex], goal, PFData{ std::get<1>(best), BeltType::Inserter, std::get<2>(best) });
 		}
 
 		// Position of source -> PFState, resolve closest destination path edge -> goal
@@ -1119,7 +1097,7 @@ private:
 			if (std::get<0>(best) == false) return nullptr;
 
 			PFGoal goal{ std::get<1>(best), { BeltType::Conveyor, BeltType::UndergroundExit }, { dirOpposite(std::get<2>(best)) } };
-			return std::make_shared<PFState>(blockedGrid, node->constraints[pathIndex], goal, sourceEndpoint.coordinate, BeltType::None, Direction::N);
+			return new PFState(blockedGrid, node->constraints[pathIndex], goal, PFData{ sourceEndpoint.coordinate, BeltType::None, Direction::N });
 		}
 
 		// Position of source -> PFState, position of destination -> goal
@@ -1132,10 +1110,10 @@ private:
 		if (cat.checkConflict(sourceCATEntry) || cat.checkConflict(destinationCATEntry)) return nullptr;
 
 		PFGoal goal{ destinationEndpoint.coordinate, { BeltType::Conveyor, BeltType::UndergroundEntrance, BeltType::UndergroundExit}, {} };
-		return std::make_shared<PFState>(blockedGrid, node->constraints[pathIndex], goal, sourceEndpoint.coordinate, BeltType::None, Direction::N);
+		return new PFState(blockedGrid, node->constraints[pathIndex], goal, PFData{ sourceEndpoint.coordinate, BeltType::None, Direction::N });
 	}
 
-	std::tuple<bool, Coordinate, Direction> resolveBestPathEdge(const std::shared_ptr<pf::Path<PFState>>& path, const Coordinate& target, const std::shared_ptr<CTNode>& node, const ConflictAvoidanceTable& cat, const std::vector<CATEntry>& constraints)
+	std::tuple<bool, Coordinate, Direction> resolveBestPathEdge(const std::shared_ptr<pf::Path<PFData>>& path, const Coordinate& target, const std::shared_ptr<CTNode>& node, const ConflictAvoidanceTable& cat, const std::vector<CATEntry>& constraints)
 	{
 		// Look for the closest edge of the path to the target
 		float bestDistance = std::numeric_limits<float>::max();
@@ -1146,10 +1124,10 @@ private:
 		// For each above ground node in the path, check the 4 directions
 		for (size_t i = 0; i < path->nodes.size(); i++)
 		{
-			const auto& pfNode = path->nodes[i];
-			if (pfNode->isAboveGround())
+			const auto& nodeData = path->nodes[i];
+			if (nodeData.isAboveGround())
 			{
-				Coordinate coord = pfNode->getCoordinate();
+				const Coordinate& coord = nodeData.coordinate;
 				for (int j = 0; j < 4; j++)
 				{
 					Direction dir = static_cast<Direction>(j);
@@ -1528,7 +1506,7 @@ private:
 	}
 };
 
-std::map<size_t, std::vector<PFState::NeighbourData>> PFState::neighbourCache = std::map<size_t, std::vector<PFState::NeighbourData>>();
+std::unordered_map<size_t, std::vector<PFData>> PFState::neighbourCache = std::unordered_map<size_t, std::vector<PFData>>();
 std::map<size_t, std::shared_ptr<LSState>> LSState::cachedStates = std::map<size_t, std::shared_ptr<LSState>>();
 size_t LSState::evaluationCount = 0;
 size_t CBPathfinder::evaluationCount = 0;
@@ -1938,11 +1916,11 @@ void checkPathfinding()
 	PFGoal goal{ Coordinate{ 2, 6 }, {}, {} };
 
 	// Make initial state and perform pathfinding
-	auto initialState = std::make_shared<PFState>(blockedGrid, constraints, goal, Coordinate{ 0, 0 }, BeltType::None, Direction::E);
-	auto path = pf::asPathfinding(initialState, true);
+	auto initialState = new PFState(blockedGrid, constraints, goal, PFData{ Coordinate{ 0, 0 }, BeltType::None, Direction::E });
+	auto path = pf::asPathfinding<PFState, PFData>(initialState, true);
 
 	// Print path
-	for (std::shared_ptr<PFState> state : path->nodes) state->print();
+	for (const auto& nodeData : path->nodes) nodeData.print();
 }
 
 void checkCBPathfinding()
