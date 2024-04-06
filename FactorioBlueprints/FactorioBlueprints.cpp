@@ -18,8 +18,8 @@
 #include "LocalSearch.h"
 #include "Pathfinding.h"
 
-#define SRAND_SEED 1
-// #define USE_LOGGER
+#define SRAND_SEED 4
+#define USE_LOGGER
 #define LOG_PREFIX "p2_full_"
 #define USE_ANNEALING
 #define ANNEALING_TEMP 2.0f
@@ -897,7 +897,6 @@ private:
 		if (!root->isValid) return;
 
 		// Initialize open set
-		std::set<size_t> closedSet;
 		std::vector<std::shared_ptr<CTNode>> openSet;
 		openSet.push_back(root);
 
@@ -1190,7 +1189,7 @@ private:
 
 		return { found, bestCoord, bestDir };
 	}
-		};
+};
 
 class LSState : public ls::State<LSState>
 {
