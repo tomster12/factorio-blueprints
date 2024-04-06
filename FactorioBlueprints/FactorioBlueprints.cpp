@@ -18,7 +18,7 @@
 #include "LocalSearch.h"
 #include "Pathfinding.h"
 
-#define SRAND_SEED 4
+#define SRAND_SEED 1
 #define USE_LOGGER
 #define LOG_PREFIX "p2_full_"
 #define USE_ANNEALING
