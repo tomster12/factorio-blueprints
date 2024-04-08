@@ -20,13 +20,13 @@
 
 #define SRAND_SEED 4
 #define USE_PATHFINDING 0
-#define USE_ANNEALING 1
+#define USE_ANNEALING 0
 #define ANNEALING_TEMP 2.0f
 #define ANNEALING_COOLING 0.005f
 #define ANNEALING_ITERATIONS 1000
 #define HILLCLIMBING_ITERATIONS 1000
 #define USE_LOGGER 1
-#define LOG_PREFIX "logs/half/sa_"
+#define LOG_PREFIX "logs/half/hc_"
 
 void checkPathfinding();
 void solveExampleProblem1();
@@ -1847,6 +1847,10 @@ private:
 			LSState::evaluationCount = 0;
 			CBPathfinder::evaluationCount = 0;
 			PFState::evaluationCount = 0;
+
+			#if USE_LOGGER
+			logger->clear();
+			#endif
 
 			std::shared_ptr<LSState> initialState = LSState::createRandom(problem, runConfig);
 

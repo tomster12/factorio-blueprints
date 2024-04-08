@@ -10,6 +10,11 @@ public:
 		: prefix(prefix)
 	{}
 
+	void clear()
+	{
+		data.clear();
+	}
+
 	void log(std::vector<float> row)
 	{
 		data.push_back(row);
