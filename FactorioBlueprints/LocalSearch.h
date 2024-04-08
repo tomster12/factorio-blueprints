@@ -149,7 +149,7 @@ namespace ls
 				{
 					current = next;
 					#ifdef LOG_LS
-					std::cout << "It " << it << ", temperature:" << temperature << ", moving to a worse fitness: " << next->getFitness() << ", chance " << acceptanceProbability << std::endl;
+					std::cout << "It " << it << ", temperature: " << temperature << ", moving to a worse fitness: " << next->getFitness() << ", chance " << acceptanceProbability << std::endl;
 					#endif
 					if (logger != nullptr)
 					{

@@ -18,14 +18,15 @@
 #include "LocalSearch.h"
 #include "Pathfinding.h"
 
-#define SRAND_SEED 1
-#define USE_LOGGER
-#define LOG_PREFIX "p2_full_"
-#define USE_ANNEALING
+#define SRAND_SEED 4
+#define USE_PATHFINDING 0
+#define USE_ANNEALING 1
 #define ANNEALING_TEMP 2.0f
 #define ANNEALING_COOLING 0.005f
 #define ANNEALING_ITERATIONS 1000
 #define HILLCLIMBING_ITERATIONS 1000
+#define USE_LOGGER 1
+#define LOG_PREFIX "logs/half/sa_"
 
 void checkPathfinding();
 void solveExampleProblem1();
@@ -1280,11 +1281,13 @@ public:
 		calculateWorld();
 		fitness -= worldCost;
 
+		#if USE_PATHFINDING
 		if (isWorldValid)
 		{
 			pathfinder = std::make_shared<CBPathfinder>(blockedGrid, itemEndpoints);
 			fitness += pathfinder->getFitness();
 		}
+		#endif
 
 		costCalculated = true;
 		return fitness;
@@ -1549,23 +1552,24 @@ public:
 	static constexpr float MAX_INSERTER_RATE = 4.62f;
 	static constexpr float MAX_CONVEYOR_RATE = 45.0f;
 
-	static ProblemSolver solve(const ProblemDefinition& problem)
+	static ProblemSolver solve(const ProblemDefinition& problem, std::shared_ptr<Logger> logger = nullptr)
 	{
 		// Produce a solver object with parameters then solve
-		ProblemSolver solver(problem);
+		ProblemSolver solver(problem, logger);
 		solver.solve();
 		return solver;
 	}
 
 private:
 	const ProblemDefinition& problem;
+	std::shared_ptr<Logger> logger;
 	int componentItemCount = -1;
 	int bestRunConfig = -1;
 	std::map<int, ItemInfo> baseItemInfos;
 	std::map<int, RunConfig> possibleRunConfigs;
 
-	ProblemSolver(const ProblemDefinition& problem)
-		: problem(problem)
+	ProblemSolver(const ProblemDefinition& problem, std::shared_ptr<Logger> logger = nullptr)
+		: problem(problem), logger(logger)
 	{}
 
 	// Main logical solve function
@@ -1831,7 +1835,8 @@ private:
 			<< std::endl;
 		#endif
 
-		for (int i = bestRunConfig; i > 0; i--)
+		// for (int i = bestRunConfig; i > 0; i--)
+		for (int i = 1; i <= bestRunConfig; i++)
 		{
 			#ifdef LOG_SOLVER
 			std::cout << "--- Evaluating run config " << i << " ---" << std::endl << std::endl;
@@ -1843,21 +1848,16 @@ private:
 			CBPathfinder::evaluationCount = 0;
 			PFState::evaluationCount = 0;
 
-			#ifdef USE_LOGGER
-			auto logger = std::make_shared<Logger>();
 			std::shared_ptr<LSState> initialState = LSState::createRandom(problem, runConfig);
 
-			#ifdef USE_ANNEALING
+			#if USE_ANNEALING
 			std::shared_ptr<LSState> finalState = ls::simulatedAnnealing(initialState, ANNEALING_TEMP, ANNEALING_COOLING, ANNEALING_ITERATIONS, logger);
-			logger->save("logs/" + std::string(LOG_PREFIX) + "sa_rc-" + std::to_string(i) + "_srand-" + std::to_string(SRAND_SEED) + ".csv", { "Iteration", "Fitness", "Paths" });
 			#else
 			std::shared_ptr<LSState> finalState = ls::hillClimbing(initialState, HILLCLIMBING_ITERATIONS, logger);
-			logger->save("logs/" + std::string(LOG_PREFIX) + "hc_rc-" + std::to_string(i) + "_srand-" + std::to_string(SRAND_SEED) + ".csv", { "Iteration", "Fitness", "Paths" });
 			#endif
 
-			#else
-			std::shared_ptr<LSState> initialState = LSState::createRandom(problem, runConfig);
-			std::shared_ptr<LSState> finalState = ls::simulatedAnnealing(initialState, ANNEALING_TEMP, ANNEALING_COOLING, ANNEALING_ITERATIONS);
+			#if USE_LOGGER
+			logger->save("rc" + std::to_string(i) + "(r" + std::to_string(SRAND_SEED) + ")", { "Iteration", "Fitness", "Paths" });
 			#endif
 
 			#ifdef LOG_SOLVER
@@ -1887,8 +1887,14 @@ void solveExampleProblem1()
 		->addOutputItem(1, 4, 2)
 		->finalise();
 
+	// Setup logger
+	std::shared_ptr<Logger> logger = nullptr;
+	#ifdef USE_LOGGER
+	logger = std::make_shared<Logger>(std::string(LOG_PREFIX) + "p1_");
+	#endif
+
 	// Run problem solver with given parameters
-	ProblemSolver solver = ProblemSolver::solve(problem);
+	ProblemSolver solver = ProblemSolver::solve(problem, logger);
 }
 
 void solveExampleProblem2()
@@ -1905,8 +1911,14 @@ void solveExampleProblem2()
 		->addOutputItem(2, 9, 9)
 		->finalise();
 
+	// Setup logger
+	std::shared_ptr<Logger> logger = nullptr;
+	#ifdef USE_LOGGER
+	logger = std::make_shared<Logger>(std::string(LOG_PREFIX) + "p2_");
+	#endif
+
 	// Run problem solver with given parameters
-	ProblemSolver solver = ProblemSolver::solve(problem);
+	ProblemSolver solver = ProblemSolver::solve(problem, logger);
 }
 
 void solveExampleProblem3()
@@ -1924,8 +1936,14 @@ void solveExampleProblem3()
 		->addOutputItem(3, 14, 14)
 		->finalise();
 
+	// Setup logger
+	std::shared_ptr<Logger> logger = nullptr;
+	#ifdef USE_LOGGER
+	logger = std::make_shared<Logger>(std::string(LOG_PREFIX) + "p3_");
+	#endif
+
 	// Run problem solver with given parameters
-	ProblemSolver solver = ProblemSolver::solve(problem);
+	ProblemSolver solver = ProblemSolver::solve(problem, logger);
 }
 
 void checkPathfinding()
