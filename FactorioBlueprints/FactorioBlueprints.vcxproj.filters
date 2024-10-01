@@ -18,7 +18,7 @@
     <ClInclude Include="Pathfinding.h">
       <Filter>Main</Filter>
     </ClInclude>
-    <ClInclude Include="Logger.h">
+    <ClInclude Include="DataLogger.h">
       <Filter>Main</Filter>
     </ClInclude>
   </ItemGroup>

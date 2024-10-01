@@ -13,8 +13,9 @@
 
 #define LOG_SOLVER
 // #define LOG_LOW
-#define LOG_LS
+#define LOG_LOCAL_SEARCH
 
+#include "DataLogger.h"
 #include "LocalSearch.h"
 #include "Pathfinding.h"
 
@@ -39,7 +40,8 @@ int main()
 	solveExampleProblem2();
 }
 
-// ------------------------------------------------
+//               Problem Definition
+// ================================================
 
 enum class BeltType : uint8_t { None = 1, Inserter = 2, Conveyor = 4, UndergroundEntrance = 8, Underground = 16, UndergroundExit = 32 };
 enum class Direction : uint8_t { N = 1, S = 2, W = 4, E = 8 };
@@ -173,7 +175,8 @@ private:
 	ProblemDefinition problemDefinition;
 };
 
-// ------------------------------------------------
+//           Conflict Based Pathfinding
+// ================================================
 
 class PFState;
 
@@ -694,7 +697,7 @@ private:
 	{
 		pathConfigs = std::vector<PathConfig>();
 
-		#ifdef LOG_LOW
+#ifdef LOG_LOW
 		// Print out path ends
 		std::cout << "--- CB Item Endpoints ---" << std::endl << std::endl;
 		for (size_t i = 0; i < this->itemEndpoints.size(); i++)
@@ -707,7 +710,7 @@ private:
 		}
 		std::cout << std::endl;
 		std::cout << "--- CB Endpoint Processing ---" << std::endl << std::endl;
-		#endif
+#endif
 
 		// Seperate end points by item
 		std::map<int, std::vector<size_t>> itemsEndpoints = std::map<int, std::vector<size_t>>();
@@ -806,7 +809,7 @@ private:
 					endpoints.erase(std::remove(endpoints.begin(), endpoints.end(), bestEndpoint.index), endpoints.end());
 				}
 
-				#ifdef LOG_LOW
+#ifdef LOG_LOW
 				// Log picked choices
 				std::cout << "Current: index " << currentIndex << ", item " << current.item << " at (" << current.coordinate.x << ", " << current.coordinate.y << ") "
 					<< (current.isSource ? "source" : "destination") << " @ " << current.rate << "/s" << std::endl;
@@ -826,14 +829,14 @@ private:
 
 				// Log created path
 				std::cout << "Created path: index " << pathIndex << " group " << pathGroup << " new spare rate @ " << bestSpareRate << "/s" << std::endl << std::endl;
-				#endif
+#endif
 
 				// Update the spare rate of the path group
 				this->pathGroupSpareRates[pathGroup] = bestSpareRate;
 			}
 		}
 
-		#ifdef LOG_LOW
+#ifdef LOG_LOW
 		// Print out paths
 		std::cout << "--- Final Path configs ---" << std::endl << std::endl;
 		for (size_t i = 0; i < this->pathConfigs.size(); i++)
@@ -870,14 +873,14 @@ private:
 			std::cout << "]" << std::endl;
 		}
 		std::cout << std::endl;
-		#endif
+#endif
 	}
 
 	void performPathfinding()
 	{
-		#ifdef LOG_LOW
+#ifdef LOG_LOW
 		std::cout << "--- CB Pathfinding ---" << std::endl << std::endl;
-		#endif
+#endif
 
 		// NOTES
 		//
@@ -913,7 +916,7 @@ private:
 			}
 			openSet.erase(std::remove(openSet.begin(), openSet.end(), current), openSet.end());
 
-			#ifdef LOG_LOW
+#ifdef LOG_LOW
 			// TODO: Matching conflicts seem to just be infinitely going up
 			std::cout << "Open set: " << openSet.size() << ", cost: " << current->cost << ", Constraints: ( ";
 			for (const auto& entry : current->constraints)
@@ -921,7 +924,7 @@ private:
 				std::cout << entry.second.size() << " ";
 			}
 			std::cout << ")" << std::endl;
-			#endif
+#endif
 
 			// If no conflict, have found a solution
 			if (!current->foundConflict.isConflict)
@@ -954,27 +957,27 @@ private:
 		// No solution without conflicts found, fitness = 0
 		if (!this->finalSolutionFound)
 		{
-			#ifdef LOG_LOW
+#ifdef LOG_LOW
 			std::cout << std::endl << "No solution found" << std::endl << std::endl;
-			#endif
+#endif
 
 			fitness = 0.0f;
 			return;
 		}
 
 		// Solution found, fitness = sum (1 + shortest / real)
-		#ifdef LOG_LOW
+#ifdef LOG_LOW
 		std::cout << std::endl << "Solution found" << std::endl << std::endl;
-		#endif
+#endif
 
 		fitness = 0.0f;
 		for (size_t i = 0; i < this->pathConfigs.size(); i++)
 		{
 			if (!this->finalSolution->solution[i]->found)
 			{
-				#ifdef LOG_LOW
+#ifdef LOG_LOW
 				std::cout << "Path " << i << " in the solution, could not found" << std::endl;
-				#endif
+#endif
 				continue;
 			}
 
@@ -989,14 +992,14 @@ private:
 			if (shortest == 0) fitness += 2.0f;
 			else fitness += (1.0f + shortest / real);
 
-			#ifdef LOG_LOW
+#ifdef LOG_LOW
 			std::cout << "Path " << i << " in the solution, shortest " << shortest << ", real " << real << ", fitness " << (1.0f + shortest / real) << std::endl;
-			#endif
+#endif
 		}
 
-		#ifdef LOG_LOW
+#ifdef LOG_LOW
 		std::cout << std::endl;
-		#endif
+#endif
 	}
 
 	void calculateNode(std::shared_ptr<CTNode> node)
@@ -1192,6 +1195,9 @@ private:
 	}
 };
 
+//            Placement Local Search
+// ================================================
+
 class LSState : public ls::State<LSState>
 {
 public:
@@ -1281,13 +1287,13 @@ public:
 		calculateWorld();
 		fitness -= worldCost;
 
-		#if USE_PATHFINDING
+#if USE_PATHFINDING
 		if (isWorldValid)
 		{
 			pathfinder = std::make_shared<CBPathfinder>(blockedGrid, itemEndpoints);
 			fitness += pathfinder->getFitness();
 		}
-		#endif
+#endif
 
 		costCalculated = true;
 		return fitness;
@@ -1411,14 +1417,18 @@ public:
 		}
 	}
 
-	void log(std::vector<float>& logRow) override
+	std::vector<float> generateDataLog() override
 	{
+		std::vector<float>  log;
+
 		// Log fitness
-		logRow.push_back(fitness);
+		log.push_back(fitness);
 
 		// Log number of paths CBS found
-		if (pathfinder == nullptr) logRow.push_back(0.0f);
-		else logRow.push_back((float)pathfinder->getPathsFound());
+		if (pathfinder == nullptr) log.push_back(0.0f);
+		else log.push_back((float)pathfinder->getPathsFound());
+
+		return log;
 	}
 
 private:
@@ -1538,6 +1548,9 @@ size_t LSState::evaluationCount = 0;
 size_t CBPathfinder::evaluationCount = 0;
 size_t PFState::evaluationCount = 0;
 
+//                Main Problem Solver
+// ================================================
+
 class ProblemSolver
 {
 public:
@@ -1552,33 +1565,33 @@ public:
 	static constexpr float MAX_INSERTER_RATE = 4.62f;
 	static constexpr float MAX_CONVEYOR_RATE = 45.0f;
 
-	static ProblemSolver solve(const ProblemDefinition& problem, std::shared_ptr<Logger> logger = nullptr)
+	static ProblemSolver solve(const ProblemDefinition& problem, std::shared_ptr<DataLogger> dataLogger = nullptr)
 	{
 		// Produce a solver object with parameters then solve
-		ProblemSolver solver(problem, logger);
+		ProblemSolver solver(problem, dataLogger);
 		solver.solve();
 		return solver;
 	}
 
 private:
 	const ProblemDefinition& problem;
-	std::shared_ptr<Logger> logger;
+	std::shared_ptr<DataLogger> dataLogger;
 	int componentItemCount = -1;
 	int bestRunConfig = -1;
 	std::map<int, ItemInfo> baseItemInfos;
 	std::map<int, RunConfig> possibleRunConfigs;
 
-	ProblemSolver(const ProblemDefinition& problem, std::shared_ptr<Logger> logger = nullptr)
-		: problem(problem), logger(logger)
+	ProblemSolver(const ProblemDefinition& problem, std::shared_ptr<DataLogger> dataLogger = nullptr)
+		: problem(problem), dataLogger(dataLogger)
 	{}
 
 	// Main logical solve function
 	// Run each solve stage sequentially
 	void solve()
 	{
-		#ifdef LOG_SOLVER
+#ifdef LOG_SOLVER
 		std::cout << "Solving..." << std::endl << std::endl;
-		#endif
+#endif
 
 		unravelRecipes();
 		calculateRunConfigs();
@@ -1597,7 +1610,7 @@ private:
 			float rate;
 		};
 
-		#ifdef LOG_SOLVER
+#ifdef LOG_SOLVER
 		std::cout
 			<< "Stage: unravelRecipes()" << std::endl
 			<< "=========================" << std::endl
@@ -1629,7 +1642,7 @@ private:
 		}
 
 		std::cout << std::endl << "----------" << std::endl << std::endl;
-		#endif
+#endif
 
 		// Keep track of component items and relative rates
 		componentItemCount = 0;
@@ -1681,7 +1694,7 @@ private:
 			}
 		}
 
-		#ifdef LOG_SOLVER
+#ifdef LOG_SOLVER
 		std::cout << "Solver Items: " << std::endl;
 		for (const auto& entry : baseItemInfos)
 		{
@@ -1691,7 +1704,7 @@ private:
 				<< std::endl;
 		}
 		std::cout << std::endl << std::endl;
-		#endif
+#endif
 	}
 
 	// Figure out maximum possible output assembers
@@ -1701,12 +1714,12 @@ private:
 	// Return maximum run config
 	void calculateRunConfigs()
 	{
-		#ifdef LOG_SOLVER
+#ifdef LOG_SOLVER
 		std::cout
 			<< "Stage: calculateRunConfigs()" << std::endl
 			<< "=============================" << std::endl
 			<< std::endl;
-		#endif
+#endif
 
 		// Calculate maximum supported output assemblers
 		float maxSupported = 0.0f;
@@ -1762,7 +1775,7 @@ private:
 			possibleRunConfigs[i] = runConfig;
 		}
 
-		#ifdef LOG_SOLVER
+#ifdef LOG_SOLVER
 		for (int i = maxSupportedCeil; i > 0; i--)
 		{
 			const auto& runConfig = possibleRunConfigs[i];
@@ -1786,7 +1799,7 @@ private:
 			}
 			std::cout << std::endl;
 		}
-		#endif
+#endif
 
 		// Check space requirements for each
 		bestRunConfig = -1;
@@ -1805,9 +1818,9 @@ private:
 				}
 			}
 
-			#ifdef LOG_SOLVER
+#ifdef LOG_SOLVER
 			std::cout << "Run config " << i << " required space: " << requiredSpace << " / " << availableSpace << std::endl;
-			#endif
+#endif
 
 			// Have found the highest run config so break out
 			if (requiredSpace <= availableSpace)
@@ -1817,9 +1830,9 @@ private:
 			}
 		}
 
-		#ifdef LOG_SOLVER
+#ifdef LOG_SOLVER
 		std::cout << "Found best run config: " << bestRunConfig << std::endl << std::endl;
-		#endif
+#endif
 	}
 
 	// Perform the main search for a solution
@@ -1828,19 +1841,19 @@ private:
 	// Bottom level A* to find paths
 	void performSearch()
 	{
-		#ifdef LOG_SOLVER
+#ifdef LOG_SOLVER
 		std::cout
 			<< "Stage: performSearch()" << std::endl
 			<< "=======================" << std::endl
 			<< std::endl;
-		#endif
+#endif
 
 		// for (int i = bestRunConfig; i > 0; i--)
 		for (int i = 1; i <= bestRunConfig; i++)
 		{
-			#ifdef LOG_SOLVER
+#ifdef LOG_SOLVER
 			std::cout << "--- Evaluating run config " << i << " ---" << std::endl << std::endl;
-			#endif
+#endif
 
 			const RunConfig& runConfig = possibleRunConfigs.at(i);
 
@@ -1848,42 +1861,46 @@ private:
 			CBPathfinder::evaluationCount = 0;
 			PFState::evaluationCount = 0;
 
-			#if USE_LOGGER
-			logger->clear();
-			#endif
+#if USE_LOGGER
+			dataLogger->clear();
+#endif
 
 			std::shared_ptr<LSState> initialState = LSState::createRandom(problem, runConfig);
 
-			#if USE_ANNEALING
-			std::shared_ptr<LSState> finalState = ls::simulatedAnnealing(initialState, ANNEALING_TEMP, ANNEALING_COOLING, ANNEALING_ITERATIONS, logger);
-			#else
+#if USE_ANNEALING
+			std::shared_ptr<LSState> finalState = ls::simulatedAnnealing(initialState, ANNEALING_TEMP, ANNEALING_COOLING, ANNEALING_ITERATIONS, dataLogger);
+#else
 			std::shared_ptr<LSState> finalState = ls::hillClimbing(initialState, HILLCLIMBING_ITERATIONS, logger);
-			#endif
+#endif
 
-			#if USE_LOGGER
-			logger->save("rc" + std::to_string(i) + "(r" + std::to_string(SRAND_SEED) + ")", { "Iteration", "Fitness", "Paths" });
-			#endif
+#if USE_LOGGER
+			dataLogger->save("rc" + std::to_string(i) + "(r" + std::to_string(SRAND_SEED) + ")", { "Iteration", "Fitness", "Paths" });
+#endif
 
-			#ifdef LOG_SOLVER
+#ifdef LOG_SOLVER
 			std::cout << "Finished evaluation, summary:" << std::endl << std::endl;
 			std::cout << "- LSState Evaluation count: " << LSState::evaluationCount << std::endl;
 			std::cout << "- CBPathfinder Evaluation count: " << CBPathfinder::evaluationCount << std::endl;
 			std::cout << "- PFState Evaluation count: " << PFState::evaluationCount << std::endl;
 			std::cout << "- Final state fitness: " << finalState->getFitness() << std::endl << std::endl;
 			finalState->print();
-			#endif
+#endif
 		}
 	}
 };
 
-// ------------------------------------------------
+//                 Example Problems
+// ================================================
 
 void solveExampleProblem1()
 {
 	// Define problem definition
 	std::map<int, Recipe> recipes;
-	recipes[1] = { 1, 1.0f, { { 0, 1 } } };
+	recipes[1] = { 1, 1.0f, { { 0, 1 } } }; // 1*Item0 -> 1*Item1 @ 1/s
 
+	// 5x5 Blueprint
+	// - Input Item0 @ 1/s at (0, 1)
+	// - Output Item1 @ at (4, 2)
 	ProblemDefinition problem = ProblemDefinitionFactory::create()
 		->setRecipes(recipes)
 		->setSize(5, 5)
@@ -1892,22 +1909,25 @@ void solveExampleProblem1()
 		->finalise();
 
 	// Setup logger
-	std::shared_ptr<Logger> logger = nullptr;
-	#ifdef USE_LOGGER
-	logger = std::make_shared<Logger>(std::string(LOG_PREFIX) + "p1_");
-	#endif
+	std::shared_ptr<DataLogger> dataLogger = nullptr;
+#ifdef USE_LOGGER
+	dataLogger = std::make_shared<DataLogger>(std::string(LOG_PREFIX) + "p1_");
+#endif
 
 	// Run problem solver with given parameters
-	ProblemSolver solver = ProblemSolver::solve(problem, logger);
+	ProblemSolver solver = ProblemSolver::solve(problem, dataLogger);
 }
 
 void solveExampleProblem2()
 {
 	// Define problem definition
 	std::map<int, Recipe> recipes;
-	recipes[1] = { 1, 0.5f, { { 0, 1 } } };
-	recipes[2] = { 1, 0.5f, { { 0, 2 }, { 1, 2 } } };
+	recipes[1] = { 1, 0.5f, { { 0, 1 } } };           // 1*Item0 -> 1*Item1 @ 0.5/s
+	recipes[2] = { 1, 0.5f, { { 0, 2 }, { 1, 2 } } }; // 2*Item0 + 2*Item1 -> 1*Item2 @ 0.5/s
 
+	// 10x10 Blueprint
+	// - Input Item0 @ 4/s at (0, 1)
+	// - Output Item2 @ at (9, 9)
 	ProblemDefinition problem = ProblemDefinitionFactory::create()
 		->setRecipes(recipes)
 		->setSize(10, 10)
@@ -1916,22 +1936,26 @@ void solveExampleProblem2()
 		->finalise();
 
 	// Setup logger
-	std::shared_ptr<Logger> logger = nullptr;
-	#ifdef USE_LOGGER
-	logger = std::make_shared<Logger>(std::string(LOG_PREFIX) + "p2_");
-	#endif
+	std::shared_ptr<DataLogger> dataLogger = nullptr;
+#ifdef USE_LOGGER
+	dataLogger = std::make_shared<DataLogger>(std::string(LOG_PREFIX) + "p2_");
+#endif
 
 	// Run problem solver with given parameters
-	ProblemSolver solver = ProblemSolver::solve(problem, logger);
+	ProblemSolver solver = ProblemSolver::solve(problem, dataLogger);
 }
 
 void solveExampleProblem3()
 {
 	// Define problem definition
 	std::map<int, Recipe> recipes;
-	recipes[2] = { 1, 2.0f, { { 0, 1 }, { 1, 2 }} };
-	recipes[3] = { 1, 0.5f, { { 0, 3 }, { 2, 1 } } };
+	recipes[2] = { 1, 2.0f, { { 0, 1 }, { 1, 2 }} };  // 1*Item0 + 2*Item1 -> 1*Item2 @ 2.0/s
+	recipes[3] = { 1, 0.5f, { { 0, 3 }, { 2, 1 } } }; // 3*Item0 + 2*Item1 -> 1*Item3 @ 0.5/s
 
+	// 15x15 Blueprint
+	// - Input Item0 @ 2/s at (0, 2)
+	// - Input Item1 @ 4/s at (0, 10)
+	// - Output Item3 @ at (14, 14)
 	ProblemDefinition problem = ProblemDefinitionFactory::create()
 		->setRecipes(recipes)
 		->setSize(15, 15)
@@ -1941,22 +1965,22 @@ void solveExampleProblem3()
 		->finalise();
 
 	// Setup logger
-	std::shared_ptr<Logger> logger = nullptr;
-	#ifdef USE_LOGGER
-	logger = std::make_shared<Logger>(std::string(LOG_PREFIX) + "p3_");
-	#endif
+	std::shared_ptr<DataLogger> dataLogger = nullptr;
+#ifdef USE_LOGGER
+	dataLogger = std::make_shared<DataLogger>(std::string(LOG_PREFIX) + "p3_");
+#endif
 
 	// Run problem solver with given parameters
-	ProblemSolver solver = ProblemSolver::solve(problem, logger);
+	ProblemSolver solver = ProblemSolver::solve(problem, dataLogger);
 }
 
 void checkPathfinding()
 {
 	// Initialize pathfinding world, constraints, and goal
 	const std::vector<std::vector<bool>> blockedGrid = {
-		{ false, false, true, true, false, false, false },
-		{ false, false, true, true, false, false, false },
-		{ false, false, false, false, false, true, false } };
+		{ 0, 0, 1, 1, 0, 0, 0 },
+		{ 0, 0, 1, 1, 0, 0, 0 },
+		{ 0, 0, 0, 0, 0, 1, 0 } };
 	std::vector<CATEntry> constraints{};
 	PFGoal goal{ Coordinate{ 2, 6 }, 0, 0 };
 
@@ -1972,9 +1996,12 @@ void checkCBPathfinding()
 {
 	// Define problem definition from example 1
 	std::map<int, Recipe> recipes;
-	recipes[1] = { 1, 0.5f, { { 0, 1 } } };
-	recipes[2] = { 1, 0.5f, { { 0, 2 }, { 1, 2 } } };
+	recipes[1] = { 1, 0.5f, { { 0, 1 } } };           // 1*Item0 -> 1*Item1 @ 0.5/s
+	recipes[2] = { 1, 0.5f, { { 0, 2 }, { 1, 2 } } }; // 2*Item0 + 2*Item1 -> 1*Item2 @ 0.5/s
 
+	// 10x10 Blueprint
+	// - Input Item0 @ 4/s at (0, 1)
+	// - Output Item2 @ at (9, 9)
 	ProblemDefinition problem = ProblemDefinitionFactory::create()
 		->setRecipes(recipes)
 		->setSize(10, 10)
@@ -1982,22 +2009,24 @@ void checkCBPathfinding()
 		->addOutputItem(2, 9, 9)
 		->finalise();
 
-	// Setup example local search state
+	// Setup example run configuration with pre-calculated rates
 	RunConfig runConfig;
 	runConfig.outputAssemblerCount = 1;
 	runConfig.itemConfigs[0] = { 0, 0, 0, 0.0f };
 	runConfig.itemConfigs[1] = { 1, 2, 1, 0.5f, { { 0, { 1, 0.5f } } } };
 	runConfig.itemConfigs[2] = { 2, 1, 1, 0.5f, { { 0, { 1, 1.0f } }, { 1, { 1, 1.0f }}} };
 
+	// Setup local search state with pre-placed assemblers
 	LSState::InserterInstance none{ -1, false };
 	std::vector<LSState::AssemblerInstance> assemblers;
 	assemblers.push_back({ 1, { 5, 0 }, { none, none, none, none, none, { 1, 0.5f, false }, { 0, 0.5f, true }, none, none, none, none, none } });
 	assemblers.push_back({ 1, { 3, 7 }, { none, none, none, { 0, 0.5f, true }, none, none, none, none, none, none, none, { 1, 0.5f, false } } });
 	assemblers.push_back({ 2, { 2, 4 }, { none, none, { 0, 1.0f, true }, { 2, 0.5f, false }, none, none, none, none, none, none, { 1, 1.0f, true }, none } });
 
+	// Check that the state is valid
 	std::shared_ptr<LSState> state = std::make_shared<LSState>(problem, runConfig, assemblers);
 	state->print();
 
-	// Request cost to trigger pathfinding
+	// Request cost to trigger pathfinding to check it works
 	std::cout << "State fitness: " << state->getFitness() << std::endl;
 }

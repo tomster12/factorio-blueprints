@@ -2,7 +2,7 @@
 
 #include <vector>
 
-#include "Logger.h"
+#include "DataLogger.h"
 
 namespace ls
 {
@@ -25,7 +25,7 @@ namespace ls
 
 		virtual float getFitness() = 0;
 		virtual std::vector<std::shared_ptr<T>> getNeighbours() = 0;
-		virtual void log(std::vector<float>& logRow) = 0;
+		virtual std::vector<float> generateDataLog() = 0;
 
 	protected:
 		static std::map<size_t, std::shared_ptr<T>> cachedStates;
@@ -33,7 +33,7 @@ namespace ls
 	};
 
 	template<typename T>
-	std::shared_ptr<T> hillClimbing(std::shared_ptr<T> start, int maxIterations = 100, std::shared_ptr<Logger> logger = nullptr)
+	std::shared_ptr<T> hillClimbing(std::shared_ptr<T> start, int maxIterations = 100, std::shared_ptr<DataLogger> dataLog = nullptr)
 	{
 		static_assert(std::is_base_of<State<T>, T>::value, "T must be a subclass of State<T>.");
 
@@ -42,14 +42,14 @@ namespace ls
 		T::getCached(start);
 		std::shared_ptr<T> current = start;
 
-		#ifdef LOG_LS
+#ifdef LOG_LOCAL_SEARCH
 		std::cout << "Start, fitness: " << current->getFitness() << std::endl;
-		#endif
-		if (logger != nullptr)
+#endif
+
+		if (dataLog != nullptr)
 		{
-			std::vector<float> logRow{ 0 };
-			current->log(logRow);
-			logger->log(logRow);
+			std::vector<float> log = current->generateDataLog();
+			dataLog->log(log);
 		}
 
 		// Until max iterations or local maximum
@@ -70,36 +70,35 @@ namespace ls
 			// Found local maximum
 			if (best == current)
 			{
-				#ifdef LOG_LS
+#ifdef LOG_LOCAL_SEARCH
 				std::cout << "It " << it << ", local maximum" << std::endl;
-				#endif
+#endif
 				break;
 			}
 
 			// Move to best neighbour
-			#ifdef LOG_LS
+#ifdef LOG_LOCAL_SEARCH
 			std::cout << "It " << it << ", better fitness: " << best->getFitness() << std::endl;
-			#endif
+#endif
 			current = best;
-			if (logger != nullptr)
+			if (dataLog != nullptr)
 			{
-				std::vector<float> logRow{ (float)it + 1.0f };
-				current->log(logRow);
-				logger->log(logRow);
+				std::vector<float> log = current->generateDataLog();
+				dataLog->log(log);
 			}
 
 			// Update best
 			if (current->getFitness() > best->getFitness()) best = current;
 		}
 
-		#ifdef LOG_LS
+#ifdef LOG_LOCAL_SEARCH
 		std::cout << "Finished " << it << " iterations, fitness: " << best->getFitness() << ", states evaluated: " << T::getCacheSize() << std::endl << std::endl;
-		#endif
+#endif
 		return best;
 	}
 
 	template<typename T>
-	std::shared_ptr<T> simulatedAnnealing(std::shared_ptr<T> start, float temperature = 1000, float coolingRate = 0.005, int maxIterations = 100, std::shared_ptr<Logger> logger = nullptr)
+	std::shared_ptr<T> simulatedAnnealing(std::shared_ptr<T> start, float temperature = 1000, float coolingRate = 0.005, int maxIterations = 100, std::shared_ptr<DataLogger> dataLogger = nullptr)
 	{
 		static_assert(std::is_base_of<State<T>, T>::value, "T must be a subclass of State<T>.");
 
@@ -107,14 +106,13 @@ namespace ls
 		T::getCached(start);
 		std::shared_ptr<T> current = start;
 
-		#ifdef LOG_LS
+#ifdef LOG_LOCAL_SEARCH
 		std::cout << "Start, fitness: " << current->getFitness() << std::endl;
-		#endif
-		if (logger != nullptr)
+#endif
+		if (dataLogger != nullptr)
 		{
-			std::vector<float> logRow{ 0 };
-			current->log(logRow);
-			logger->log(logRow);
+			std::vector<float> log = current->generateDataLog();
+			dataLogger->log(log);
 		}
 
 		// Until max iterations or local maximum
@@ -130,14 +128,13 @@ namespace ls
 			if (delta >= 0)
 			{
 				current = next;
-				#ifdef LOG_LS
+#ifdef LOG_LOCAL_SEARCH
 				std::cout << "It " << it << ", temperature: " << temperature << ", moving to a better fitness: " << next->getFitness() << std::endl;
-				#endif
-				if (logger != nullptr)
+#endif
+				if (dataLogger != nullptr)
 				{
-					std::vector<float> logRow{ (float)it + 1.0f };
-					current->log(logRow);
-					logger->log(logRow);
+					std::vector<float> log = current->generateDataLog();
+					dataLogger->log(log);
 				}
 			}
 
@@ -148,14 +145,13 @@ namespace ls
 				if ((acceptanceProbability > (rand() / (float)RAND_MAX)))
 				{
 					current = next;
-					#ifdef LOG_LS
+#ifdef LOG_LOCAL_SEARCH
 					std::cout << "It " << it << ", temperature: " << temperature << ", moving to a worse fitness: " << next->getFitness() << ", chance " << acceptanceProbability << std::endl;
-					#endif
-					if (logger != nullptr)
+#endif
+					if (dataLogger != nullptr)
 					{
-						std::vector<float> logRow{ (float)it + 1.0f };
-						current->log(logRow);
-						logger->log(logRow);
+						std::vector<float> log = current->generateDataLog();
+						dataLogger->log(log);
 					}
 				}
 			}
@@ -170,9 +166,9 @@ namespace ls
 			}
 		}
 
-		#ifdef LOG_LS
+#ifdef LOG_LOCAL_SEARCH
 		std::cout << "Finished " << it << " iterations, fitness: " << best->getFitness() << ", states seen: " << T::getCacheSize() << std::endl << std::endl;
-		#endif
+#endif
 
 		return best;
 	}
