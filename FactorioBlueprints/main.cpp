@@ -4,7 +4,6 @@
 #include "macros.h"
 #include "types.h"
 #include "ProblemSolver.h"
-#include "DataLogger.h"
 #include "CBPathfinder.h"
 #include "LSState.h"
 
@@ -36,8 +35,7 @@ void solveExampleProblem1()
 		->finalise();
 
 	// Run problem solver with given parameters
-	std::shared_ptr<DataLogger> dataLogger = std::make_shared<DataLogger>(std::string(DATA_LOGGER_PREFIX) + "p1_", !USE_DATA_LOGGER);
-	ProblemSolver solver = ProblemSolver::solve(problem, dataLogger);
+	ProblemSolver solver = ProblemSolver::solve(problem);
 }
 
 void solveExampleProblem2()
@@ -58,8 +56,7 @@ void solveExampleProblem2()
 		->finalise();
 
 	// Run problem solver with given parameters
-	std::shared_ptr<DataLogger> dataLogger = std::make_shared<DataLogger>(std::string(DATA_LOGGER_PREFIX) + "p2_", !USE_DATA_LOGGER);
-	ProblemSolver solver = ProblemSolver::solve(problem, dataLogger);
+	ProblemSolver solver = ProblemSolver::solve(problem);
 }
 
 void solveExampleProblem3()
@@ -82,8 +79,7 @@ void solveExampleProblem3()
 		->finalise();
 
 	// Run problem solver with given parameters
-	std::shared_ptr<DataLogger> dataLogger = std::make_shared<DataLogger>(std::string(DATA_LOGGER_PREFIX) + "p3_", !USE_DATA_LOGGER);
-	ProblemSolver solver = ProblemSolver::solve(problem, dataLogger);
+	ProblemSolver solver = ProblemSolver::solve(problem);
 }
 
 void checkPathfinding()

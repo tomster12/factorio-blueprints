@@ -3,7 +3,6 @@
 #include <stack>
 #include <string>
 #include "ProblemSolver.h"
-#include "DataLogger.h"
 #include "types.h"
 #include "log.h"
 #include "global.h"
@@ -45,16 +44,16 @@ ProblemDefinition ProblemDefinitionFactory::finalise()
 	return std::move(problemDefinition);
 }
 
-ProblemSolver ProblemSolver::solve(const ProblemDefinition& problem, std::shared_ptr<DataLogger> dataLogger)
+ProblemSolver ProblemSolver::solve(const ProblemDefinition& problem)
 {
 	// Produce a solver object with parameters then solve
-	ProblemSolver solver(problem, dataLogger);
+	ProblemSolver solver(problem);
 	solver.solve();
 	return solver;
 }
 
-ProblemSolver::ProblemSolver(const ProblemDefinition& problem, std::shared_ptr<DataLogger> dataLogger)
-	: problem(problem), dataLogger(dataLogger)
+ProblemSolver::ProblemSolver(const ProblemDefinition& problem)
+	: problem(problem)
 {}
 
 void ProblemSolver::solve()
@@ -312,16 +311,12 @@ void ProblemSolver::performSearch()
 		Global::evalCountPF = 0;
 		Global::evalCountLS = 0;
 
-		dataLogger->clear();
 		std::shared_ptr<LSState> initialState = LSState::createRandom(problem, runConfig);
-
 		#if USE_ANNEALING
-		std::shared_ptr<LSState> finalState = ls::simulatedAnnealing(initialState, ANNEALING_TEMP, ANNEALING_COOLING, ANNEALING_ITERATIONS, dataLogger);
+		std::shared_ptr<LSState> finalState = ls::simulatedAnnealing(initialState, ANNEALING_TEMP, ANNEALING_COOLING, ANNEALING_ITERATIONS);
 		#else
-		std::shared_ptr<LSState> finalState = ls::hillClimbing(initialState, HILLCLIMBING_ITERATIONS, dataLogger);
+		std::shared_ptr<LSState> finalState = ls::hillClimbing(initialState, HILLCLIMBING_ITERATIONS);
 		#endif
-
-		dataLogger->save("rc" + std::to_string(i) + "(r" + std::to_string(SRAND_SEED) + ")", { "Iteration", "Fitness", "Paths" });
 
 		LOG(SOLVER, "Finished evaluation, summary:\n\n");
 		LOG(SOLVER, "- LSState Evaluation count: " << Global::evalCountLS << "\n");

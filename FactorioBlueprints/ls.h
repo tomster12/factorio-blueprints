@@ -3,7 +3,6 @@
 #include <vector>
 #include <map>
 #include <iostream>
-#include "DataLogger.h"
 #include "macros.h"
 #include "log.h"
 
@@ -38,7 +37,7 @@ namespace ls
 	};
 
 	template<typename T>
-	std::shared_ptr<T> hillClimbing(std::shared_ptr<T> start, int maxIterations, std::shared_ptr<DataLogger> dataLogger)
+	std::shared_ptr<T> hillClimbing(std::shared_ptr<T> start, int maxIterations)
 	{
 		static_assert(std::is_base_of<State<T>, T>::value, "T must be a subclass of State<T>.");
 
@@ -46,7 +45,6 @@ namespace ls
 		StateCache<T> cache;
 		std::shared_ptr<T> current = cache.getCached(start);
 		LOG(LOCAL_SEARCH, "Start, fitness: " << current->getFitness() << "\n");
-		dataLogger->log(current->generateDataLog());
 
 		// Until max iterations or local maximum
 		std::shared_ptr<T> best = start;
@@ -73,7 +71,6 @@ namespace ls
 
 			// Move to best neighbour
 			current = best;
-			dataLogger->log(best->generateDataLog());
 			LOG(LOCAL_SEARCH, "It " << it << ", better fitness: " << best->getFitness() << "\n");
 
 			// Update current best
@@ -85,7 +82,7 @@ namespace ls
 	}
 
 	template<typename T>
-	std::shared_ptr<T> simulatedAnnealing(std::shared_ptr<T> start, float temperature, float coolingRate, int maxIterations, std::shared_ptr<DataLogger> dataLogger)
+	std::shared_ptr<T> simulatedAnnealing(std::shared_ptr<T> start, float temperature, float coolingRate, int maxIterations)
 	{
 		static_assert(std::is_base_of<State<T>, T>::value, "T must be a subclass of State<T>.");
 
@@ -93,7 +90,6 @@ namespace ls
 		StateCache<T> cache;
 		std::shared_ptr<T> current = cache.getCached(start);
 		LOG(LOCAL_SEARCH, "Start, fitness: " << current->getFitness() << "\n");
-		dataLogger->log(current->generateDataLog());
 
 		// Until max iterations or local maximum
 		size_t it = 0;
@@ -110,7 +106,6 @@ namespace ls
 			{
 				current = next;
 				LOG(LOCAL_SEARCH, "It " << it << ", temperature: " << temperature << ", moving to a better fitness: " << next->getFitness() << "\n");
-				dataLogger->log(current->generateDataLog());
 			}
 
 			// If worse, accept with probability
@@ -121,7 +116,6 @@ namespace ls
 				{
 					current = next;
 					LOG(LOCAL_SEARCH, "It " << it << ", temperature: " << temperature << ", moving to a worse fitness: " << next->getFitness() << ", chance " << acceptanceProbability << "\n");
-					dataLogger->log(current->generateDataLog());
 				}
 			}
 

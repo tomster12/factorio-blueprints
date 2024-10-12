@@ -1,6 +1,5 @@
 #pragma once
 
-#include "dataLogger.h"
 #include "types.h"
 
 struct ProblemDefinition
@@ -58,7 +57,7 @@ private:
 class ProblemSolver
 {
 public:
-	static ProblemSolver solve(const ProblemDefinition& problem, std::shared_ptr<DataLogger> dataLogger = nullptr);
+	static ProblemSolver solve(const ProblemDefinition& problem);
 
 private:
 	struct ItemInfo
@@ -69,13 +68,12 @@ private:
 	};
 
 	const ProblemDefinition& problem;
-	std::shared_ptr<DataLogger> dataLogger;
 	int componentItemCount = -1;
 	int bestRunConfig = -1;
 	std::map<int, ItemInfo> baseItemInfos;
 	std::map<int, RunConfig> possibleRunConfigs;
 
-	ProblemSolver(const ProblemDefinition& problem, std::shared_ptr<DataLogger> dataLogger = nullptr);
+	ProblemSolver(const ProblemDefinition& problem);
 	void solve();
 	void unravelRecipes();
 	void calculateRunConfigs();

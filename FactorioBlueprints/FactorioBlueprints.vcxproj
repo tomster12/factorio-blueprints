@@ -139,7 +139,6 @@
     <ClInclude Include="macros.h" />
     <ClInclude Include="ProblemSolver.h" />
     <ClInclude Include="ls.h" />
-    <ClInclude Include="DataLogger.h" />
     <ClInclude Include="pf.h" />
     <ClInclude Include="types.h" />
   </ItemGroup>
