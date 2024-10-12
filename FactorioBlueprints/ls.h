@@ -1,14 +1,11 @@
 #pragma once
 
-#ifndef LOG
-#define LOG(level, ...)  \
-	if (LOG_##level##_ENABLED) { \
-		std::cout << __VA_ARGS__; \
-	}
-#endif
-
 #include <vector>
+#include <map>
+#include <iostream>
 #include "DataLogger.h"
+#include "macros.h"
+#include "log.h"
 
 namespace ls
 {
@@ -16,26 +13,28 @@ namespace ls
 	class State
 	{
 	public:
-		static std::shared_ptr<T> getCached(std::shared_ptr<T> state)
-		{
-			size_t hash = state->hash;
-			if (cachedStates.find(hash) == cachedStates.end()) cachedStates[hash] = state;
-			return cachedStates[hash];
-		}
-
-		static void clearCache() { cachedStates = std::map<size_t, std::shared_ptr<T>>(); }
-
-		static size_t getCacheSize() { return cachedStates.size(); }
-
-		bool operator==(State<T>& other) const { return hash == hash; }
-
+		bool operator==(State<T>& other) const { return getHash() == other.getHash(); }
 		virtual float getFitness() = 0;
 		virtual std::vector<std::shared_ptr<T>> getNeighbours() = 0;
+		virtual size_t getHash() = 0;
 		virtual std::vector<float> generateDataLog() = 0;
+	};
 
-	protected:
-		static std::map<size_t, std::shared_ptr<T>> cachedStates;
-		size_t hash = 0;
+	template<typename T>
+	class StateCache
+	{
+	public:
+		inline StateCache() { cache = std::map<size_t, std::shared_ptr<T>>(); }
+		inline std::shared_ptr<T> getCached(std::shared_ptr<T> state)
+		{
+			size_t hash = state->getHash();
+			if (cache.find(hash) == cache.end()) cache[hash] = state;
+			return cache[hash];
+		}
+		inline size_t getCacheSize() { return cache.size(); }
+
+	private:
+		std::map<size_t, std::shared_ptr<T>> cache;
 	};
 
 	template<typename T>
@@ -44,10 +43,8 @@ namespace ls
 		static_assert(std::is_base_of<State<T>, T>::value, "T must be a subclass of State<T>.");
 
 		// Initialize with start state
-		T::clearCache();
-		T::getCached(start);
-		std::shared_ptr<T> current = start;
-
+		StateCache<T> cache;
+		std::shared_ptr<T> current = cache.getCached(start);
 		LOG(LOCAL_SEARCH, "Start, fitness: " << current->getFitness() << "\n");
 		dataLogger->log(current->generateDataLog());
 
@@ -60,9 +57,10 @@ namespace ls
 			std::shared_ptr<T> best = current;
 			for (std::shared_ptr<T>& neighbour : current->getNeighbours())
 			{
-				if (neighbour->getFitness() > best->getFitness())
+				std::shared_ptr<T> cached = cache.getCached(neighbour);
+				if (cached->getFitness() > best->getFitness())
 				{
-					best = neighbour;
+					best = cached;
 				}
 			}
 
@@ -74,15 +72,15 @@ namespace ls
 			}
 
 			// Move to best neighbour
-			LOG(LOCAL_SEARCH, "It " << it << ", better fitness: " << best->getFitness() << "\n");
-			dataLogger->log(best->generateDataLog());
 			current = best;
+			dataLogger->log(best->generateDataLog());
+			LOG(LOCAL_SEARCH, "It " << it << ", better fitness: " << best->getFitness() << "\n");
 
-			// Update best
+			// Update current best
 			if (current->getFitness() > best->getFitness()) best = current;
 		}
 
-		LOG(LOCAL_SEARCH, "Finished " << it << " iterations, fitness: " << best->getFitness() << ", states evaluated: " << T::getCacheSize() << "\n\n");
+		LOG(LOCAL_SEARCH, "Finished " << it << " iterations, fitness: " << best->getFitness() << ", states evaluated: " << cache.getCacheSize() << "\n\n");
 		return best;
 	}
 
@@ -91,10 +89,9 @@ namespace ls
 	{
 		static_assert(std::is_base_of<State<T>, T>::value, "T must be a subclass of State<T>.");
 
-		T::clearCache();
-		T::getCached(start);
-		std::shared_ptr<T> current = start;
-
+		// Initialize with start state
+		StateCache<T> cache;
+		std::shared_ptr<T> current = cache.getCached(start);
 		LOG(LOCAL_SEARCH, "Start, fitness: " << current->getFitness() << "\n");
 		dataLogger->log(current->generateDataLog());
 
@@ -105,6 +102,7 @@ namespace ls
 		{
 			// Find random neighbour
 			std::shared_ptr<T> next = current->getNeighbours()[rand() % current->getNeighbours().size()];
+			next = cache.getCached(next);
 			float delta = next->getFitness() - current->getFitness();
 
 			// If better, move to neighbour
@@ -134,7 +132,7 @@ namespace ls
 			if (current->getFitness() > best->getFitness()) best = current;
 		}
 
-		LOG(LOCAL_SEARCH, "Finished " << it << " iterations, fitness: " << best->getFitness() << ", states seen: " << T::getCacheSize() << "\n\n");
+		LOG(LOCAL_SEARCH, "Finished " << it << " iterations, fitness: " << best->getFitness() << ", states seen: " << cache.getCacheSize() << "\n\n");
 		return best;
 	}
 }

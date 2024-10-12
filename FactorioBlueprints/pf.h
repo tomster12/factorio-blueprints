@@ -7,36 +7,29 @@
 
 namespace pf
 {
-	float EuclideanDistance(float x1, float y1, float x2, float y2)
+	inline float EuclideanDistance(float x1, float y1, float x2, float y2)
 	{
 		return static_cast<float>(sqrt(pow(x2 - x1, 2) + pow(y2 - y1, 2)));
 	}
 
-	float ManhattanDistance(float x1, float y1, float x2, float y2)
+	inline float ManhattanDistance(float x1, float y1, float x2, float y2)
 	{
 		return static_cast<float>(abs(x2 - x1) + abs(y2 - y1));
 	}
 
-	// T = State { State }
-	// D = Data { hash, ... }
 	template<typename T, typename D>
 	class State
 	{
 	public:
-		static size_t evaluationCount;
-
 		State(D data, T* parent)
-			: data(data), parent(parent), dataHash(data.getHash())
+			: data(std::move(data)), parent(parent), dataHash(data.getHash())
 		{}
-
 		bool operator==(T& other) const { dataHash = other.dataHash; }
-
 		virtual bool isGoal() = 0;
 		virtual float getFCost() = 0;
 		virtual float getGCost() = 0;
 		virtual float getHCost() = 0;
 		virtual std::vector<D*> getNeighbours() = 0;
-
 		const D& getData() const { return data; }
 		D moveData() { return std::move(data); }
 		size_t getDataHash() const { return dataHash; }
@@ -44,16 +37,16 @@ namespace pf
 
 	protected:
 		D data;
-		size_t dataHash;
 		T* parent;
+		size_t dataHash;
 	};
 
 	template<typename D>
 	struct Path
 	{
-		bool found;
+		bool found = false;
 		std::vector<D> nodes;
-		float cost;
+		float cost = -1;
 	};
 
 	struct CompareNodeByFCost
@@ -68,17 +61,15 @@ namespace pf
 	template<typename T, typename D>
 	std::shared_ptr<Path<D>> asPathfinding(T* start, bool toLog = false)
 	{
-		T::evaluationCount++;
-
 		// Start open set with start node
 		std::priority_queue<T*, std::vector<T*>, CompareNodeByFCost> openSet;
-		std::unordered_set<size_t> closedHashSet;
-		std::unordered_set<size_t> openHashSet;
+		std::unordered_set<size_t> closedSetHash;
+		std::unordered_set<size_t> openSetHash;
 		std::deque<T*> allNodes;
 
 		allNodes.push_back(start);
 		openSet.push(start);
-		openHashSet.insert(start->getDataHash());
+		openSetHash.insert(start->getDataHash());
 
 		// Until open set is empty
 		while (!openSet.empty())
@@ -99,6 +90,7 @@ namespace pf
 					path->cost += node->getGCost();
 					node = node->getParent();
 				}
+
 				std::reverse(path->nodes.begin(), path->nodes.end());
 				path->found = true;
 
@@ -108,8 +100,8 @@ namespace pf
 			}
 
 			// Delete current and remove from open set
-			openHashSet.erase(current->getDataHash());
-			closedHashSet.insert(current->getDataHash());
+			openSetHash.erase(current->getDataHash());
+			closedSetHash.insert(current->getDataHash());
 
 			// Add neighbours to open if not in open or closed set
 			const auto neighbours = current->getNeighbours();
@@ -117,13 +109,13 @@ namespace pf
 			{
 				const size_t neighbourHash = neighbourDataPtr->getHash();
 
-				if (closedHashSet.find(neighbourHash) != closedHashSet.end()) continue;
-				if (openHashSet.find(neighbourHash) != openHashSet.end()) continue;
+				if (closedSetHash.find(neighbourHash) != closedSetHash.end()) continue;
+				if (openSetHash.find(neighbourHash) != openSetHash.end()) continue;
 
 				T* neighbour = new T(*neighbourDataPtr, current);
 				allNodes.push_back(neighbour);
 				openSet.push(neighbour);
-				openHashSet.insert(neighbour->getDataHash());
+				openSetHash.insert(neighbour->getDataHash());
 			}
 		}
 

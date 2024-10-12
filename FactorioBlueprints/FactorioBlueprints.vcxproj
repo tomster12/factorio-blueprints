@@ -126,12 +126,22 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="FactorioBlueprints.cpp" />
+    <ClCompile Include="CBPathfinder.cpp" />
+    <ClCompile Include="LSState.cpp" />
+    <ClCompile Include="ProblemSolver.cpp" />
+    <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="LocalSearch.h" />
+    <ClInclude Include="CBPathfinder.h" />
+    <ClInclude Include="global.h" />
+    <ClInclude Include="LSState.h" />
+    <ClInclude Include="log.h" />
+    <ClInclude Include="macros.h" />
+    <ClInclude Include="ProblemSolver.h" />
+    <ClInclude Include="ls.h" />
     <ClInclude Include="DataLogger.h" />
-    <ClInclude Include="Pathfinding.h" />
+    <ClInclude Include="pf.h" />
+    <ClInclude Include="types.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
