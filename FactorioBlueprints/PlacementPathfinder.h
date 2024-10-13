@@ -6,6 +6,7 @@
 #include <map>
 #include <vector>
 #include <unordered_map>
+#include <mutex>
 #include "types.h"
 #include "pf.h"
 
@@ -63,7 +64,6 @@ namespace impl
 	{
 	public:
 		CAT();
-		CAT(const CAT& other);
 		void addConflict(size_t pathIndex, const CATEntry& entry);
 		void removeConflict(size_t pathIndex);
 		bool checkConflict(const CATEntry& entry) const;
@@ -193,6 +193,7 @@ namespace impl
 			std::vector<size_t> pathsToCalculate{};
 			std::map<size_t, std::vector<CATEntry>> constraints{};
 			std::map<size_t, std::shared_ptr<pf::Path<PathfindingData>>> solution{};
+			CAT cat;
 			CTConflict firstConflict{};
 			float cost = 0.0f;
 		};
@@ -203,22 +204,29 @@ namespace impl
 		void print();
 
 	private:
+		struct CompareCTNodeByCost
+		{
+			bool operator()(const std::shared_ptr<CTNode>& a, const std::shared_ptr<CTNode>& b) const
+			{
+				return a->cost > b->cost;
+			}
+		};
+
 		const std::vector<std::vector<bool>>& blockedGrid;
 		const std::vector<ItemEndpoint>& itemEndpoints;
-
 		size_t currentPathGroup = 0;
 		std::map<size_t, float> pathGroupSpareRates;
 		std::vector<PathConfig> pathConfigs;
-		std::shared_ptr<CTNode> finalSolution;
-		bool finalSolutionFound = false;
+		std::shared_ptr<CTNode> solutionNode;
+		bool solutionNodeFound = false;
 		bool fitnessCalculated = false;
 		float fitness = 0.0f;
 
 		void solve();
 		void preprocessPaths();
 		void performPathfinding();
-		void calculateNode(std::shared_ptr<CTNode> node);
-		PathfindingState* initPathNodeWithContext(size_t pathIndex, const std::shared_ptr<CTNode>& node, const CAT& cat);
-		std::tuple<bool, Coordinate, Direction> findPathEdgeWithContext(const std::shared_ptr<pf::Path<PathfindingData>>& path, const Coordinate& target, const std::shared_ptr<CTNode>& node, const CAT& cat, const std::vector<CATEntry>& constraints);
+		void processCTNode(std::shared_ptr<CTNode> node);
+		PathfindingState* initPathNodeWithContext(size_t pathIndex, const std::shared_ptr<CTNode>& node);
+		std::tuple<bool, Coordinate, Direction> findPathEdgeWithContext(const std::shared_ptr<pf::Path<PathfindingData>>& path, const Coordinate& target, const std::shared_ptr<CTNode>& node, const std::vector<CATEntry>& constraints);
 	};
 }

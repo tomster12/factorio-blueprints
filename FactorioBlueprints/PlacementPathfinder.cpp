@@ -1,3 +1,4 @@
+#include <mutex>
 #include "PlacementPathfinder.h"
 #include "log.h"
 #include "macros.h"
@@ -27,7 +28,7 @@
 // Optimization Notes
 // - First step:
 //   - performPathfinding() first initializes an empty node with all the paths set to be calculated
-//   - The calculateNode() function then calculates the paths in order and updates the node solutions
+//   - The processCTNode() function then calculates the paths in order and updates the node solutions
 //   - The solutions are copied into the node CAT and conflicts are found
 //   - The node is then added to the open set if valid
 // - Now each loop:
@@ -43,14 +44,6 @@
 namespace impl
 {
 	CAT::CAT() {}
-
-	CAT::CAT(const CAT& other)
-	{
-		for (const auto& entry : other.conflictTable)
-		{
-			conflictTable[entry.first] = entry.second;
-		}
-	}
 
 	void CAT::addConflict(size_t pathIndex, const CATEntry& entry)
 	{
@@ -146,6 +139,7 @@ namespace impl
 
 			neighbours.push_back(&neighbourData);
 		}
+
 		return neighbours;
 	}
 
@@ -287,9 +281,9 @@ namespace impl
 
 	size_t PlacementPathfinder::getPathsFound() const
 	{
-		if (!finalSolutionFound) return 0;
+		if (!solutionNodeFound) return 0;
 		size_t pathsFound = 0;
-		for (const auto& path : finalSolution->solution)
+		for (const auto& path : solutionNode->solution)
 		{
 			if (path.second->found) pathsFound++;
 		}
@@ -300,7 +294,7 @@ namespace impl
 	{
 		std::cout << "--- CB Pathfinding Search Log ---" << std::endl << std::endl;
 
-		if (!finalSolutionFound)
+		if (!solutionNodeFound)
 		{
 			std::cout << "No solution found" << std::endl;
 			return;
@@ -309,7 +303,7 @@ namespace impl
 		std::cout << "Solution found, fitness: " << fitness << std::endl << std::endl;
 
 		std::cout << "Constraints: ( ";
-		for (const auto& entry : finalSolution->constraints)
+		for (const auto& entry : solutionNode->constraints)
 		{
 			std::cout << entry.second.size() << " ";
 		}
@@ -329,9 +323,9 @@ namespace impl
 			}
 		};
 
-		for (size_t i = 0; i < finalSolution->solution.size(); i++)
+		for (size_t i = 0; i < solutionNode->solution.size(); i++)
 		{
-			const auto& path = finalSolution->solution[i];
+			const auto& path = solutionNode->solution[i];
 			std::cout << "Path " << i << " ";
 			printEndpoint(pathConfigs[i].source);
 			std::cout << " to ";
@@ -534,29 +528,24 @@ namespace impl
 		// The openSet will eventually be empty if all the CTNodes end up invalid
 		// This would happen in a solution with no conflicts but some paths invalid
 
+		// Initialize open set
+		std::priority_queue<std::shared_ptr<CTNode>, std::vector<std::shared_ptr<CTNode>>, CompareCTNodeByCost> openSet;
+
 		// Initialize root with all paths, calculate, exit early if invalid
 		auto root = std::make_shared<CTNode>();
 		root->isValid = true;
 		for (size_t i = 0; i < this->pathConfigs.size(); i++) root->pathsToCalculate.push_back(i);
-		calculateNode(root);
-		if (!root->isValid) return;
-
-		// Initialize open set
-		std::vector<std::shared_ptr<CTNode>> openSet;
-		openSet.push_back(root);
+		processCTNode(root);
+		if (root->isValid) openSet.push(root);
 
 		// While there are nodes to process
-		this->finalSolutionFound = false;
+		this->solutionNodeFound = false;
 		while (openSet.size() > 0)
 		{
-			// Pop the node with the lowest cost
-			auto current = openSet[0];
-			for (const auto& node : openSet)
-			{
-				if (node->cost < current->cost) current = node;
-			}
-			openSet.erase(std::remove(openSet.begin(), openSet.end(), current), openSet.end());
+			auto current = openSet.top();
+			openSet.pop();
 
+			// LOGGING: Current search status
 			LOG(CB_SEARCH, "  Open set: " << openSet.size() << ", cost: " << current->cost << ", Constraints: ( ");
 			for (const auto& entry : current->constraints)
 			{
@@ -567,31 +556,30 @@ namespace impl
 			// If no conflict, have found a solution
 			if (!current->firstConflict.isConflict)
 			{
-				this->finalSolutionFound = true;
-				this->finalSolution = current;
+				this->solutionNodeFound = true;
+				this->solutionNode = current;
 				break;
 			}
 
 			// Create new nodes for each conflicting path
 			for (size_t pathIndex : { current->firstConflict.pathA, current->firstConflict.pathB })
 			{
-				// Initialize next node and copy across values
+				// Initialize next node and calculate
 				auto next = std::make_shared<CTNode>();
 				next->isValid = true;
 				next->constraints = current->constraints;
 				next->solution = current->solution;
 				next->cost = current->cost;
+				next->cat = current->cat;
 				next->pathsToCalculate = { pathIndex };
 				next->constraints[pathIndex].push_back(current->firstConflict.catEntry);
-
-				// Calculate the node and add to open set if valid
-				calculateNode(next);
-				if (next->isValid) openSet.push_back(next);
+				processCTNode(next);
+				if (next->isValid) openSet.push(next);
 			}
 		}
 
 		// No solution without conflicts found, fitness = 0
-		if (!this->finalSolutionFound)
+		if (!this->solutionNodeFound)
 		{
 			LOG(CB_SEARCH, "\n  No solution found\n\n");
 			fitness = 0.0f;
@@ -604,17 +592,17 @@ namespace impl
 		fitness = 0.0f;
 		for (size_t i = 0; i < this->pathConfigs.size(); i++)
 		{
-			if (!this->finalSolution->solution[i]->found)
+			if (!this->solutionNode->solution[i]->found)
 			{
 				LOG(CB_PATHS, "  Path " << i << " in the solution, could not found\n");
 				continue;
 			}
 
 			// Its possible with underground belts to have a lower cost, but cap it to max
-			const auto& first = this->finalSolution->solution[i]->nodes[0];
-			const auto& last = this->finalSolution->solution[i]->nodes.back();
+			const auto& first = this->solutionNode->solution[i]->nodes[0];
+			const auto& last = this->solutionNode->solution[i]->nodes.back();
 			float shortest = pf::ManhattanDistance((float)first.coordinate.x, (float)first.coordinate.y, (float)last.coordinate.x, (float)last.coordinate.y);
-			float real = this->finalSolution->solution[i]->cost;
+			float real = this->solutionNode->solution[i]->cost;
 			real = std::max(real, shortest);
 			if (shortest == 0) fitness += 2.0f;
 			else fitness += (1.0f + shortest / real);
@@ -623,7 +611,7 @@ namespace impl
 		}
 	}
 
-	void PlacementPathfinder::calculateNode(std::shared_ptr<CTNode> node)
+	void PlacementPathfinder::processCTNode(std::shared_ptr<CTNode> node)
 	{
 		// Exit early if no paths to calculate
 		if (node->pathsToCalculate.size() == 0) return;
@@ -649,37 +637,30 @@ namespace impl
 			}
 		}
 
-		// NOTE
-		// Initialize CAT with already calculated paths and update cost
-		// Recreating the CAT each time here is a tradeoff between memory and CPU
-		// - Copying the CAT over could actually be slower anyway
-		// Potentially additionally need to look at the tradeoff between holding all constraints and copying
-		// - These are very small structs so likely not an issue
-		CAT cat;
-		for (size_t i = 0; i < this->pathConfigs.size(); i++)
-		{
-			if (std::find(calculateOrder.begin(), calculateOrder.end(), i) == calculateOrder.end())
-			{
-				node->cost += node->solution[i]->cost;
-				for (const auto& nodeData : node->solution[i]->nodes) cat.addConflict(i, nodeData.getCATEntry());
-			}
-		}
-
-		// Calculate each path in order and update CAT and cost
+		// Remove paths that are being calculated
 		for (size_t pathIndex : calculateOrder)
 		{
-			auto source = initPathNodeWithContext(pathIndex, node, cat);
-			if (source == nullptr) return;
+			node->cat.removeConflict(pathIndex);
+		}
 
+		// Calculate each path in order
+		for (size_t pathIndex : calculateOrder)
+		{
+			auto source = initPathNodeWithContext(pathIndex, node);
+			if (source == nullptr) return;
 			node->solution[pathIndex] = pf::asPathfinding<PathfindingState, PathfindingData>(source);
 			Global::evalCountPF++;
+		}
 
+		// Copy solutions into CAT
+		for (size_t pathIndex : calculateOrder)
+		{
 			node->cost += node->solution[pathIndex]->cost;
-			for (const auto& nodeData : node->solution[pathIndex]->nodes) cat.addConflict(pathIndex, nodeData.getCATEntry());
+			for (const auto& nodeData : node->solution[pathIndex]->nodes) node->cat.addConflict(pathIndex, nodeData.getCATEntry());
 		}
 
 		// Find if there are any conflicts for this node and update
-		auto conflict = cat.getConflictingPaths();
+		auto conflict = node->cat.getConflictingPaths();
 		if (conflict.second.size() == 0)
 		{
 			node->firstConflict = { false };
@@ -696,7 +677,7 @@ namespace impl
 		node->isValid = true;
 	}
 
-	PathfindingState* PlacementPathfinder::initPathNodeWithContext(size_t pathIndex, const std::shared_ptr<CTNode>& node, const CAT& cat)
+	PathfindingState* PlacementPathfinder::initPathNodeWithContext(size_t pathIndex, const std::shared_ptr<CTNode>& node)
 	{
 		// Attempt to resolve the path considering the given CT node
 		// Return nullptr if conflicts and constraints prevent resolution
@@ -710,10 +691,10 @@ namespace impl
 
 			const auto destinationCATEntry = calculateCATEntry(destinationEndpoint.coordinate, BeltType::Conveyor, Direction::N);
 			if (std::any_of(constraints.begin(), constraints.end(), [&](const CATEntry& entry) { return checkCATEntryConflict(entry, destinationCATEntry); })) return nullptr;
-			if (cat.checkConflict(destinationCATEntry)) return nullptr;
+			if (node->cat.checkConflict(destinationCATEntry)) return nullptr;
 
 			const auto& sourcePath = node->solution[path.source.index];
-			auto best = findPathEdgeWithContext(sourcePath, destinationEndpoint.coordinate, node, cat, constraints);
+			auto best = findPathEdgeWithContext(sourcePath, destinationEndpoint.coordinate, node, constraints);
 			if (std::get<0>(best) == false) return nullptr;
 
 			PathfindingGoal goal{
@@ -734,10 +715,10 @@ namespace impl
 
 			const auto sourceCATEntry = calculateCATEntry(sourceEndpoint.coordinate, BeltType::Conveyor, Direction::N);
 			if (std::any_of(constraints.begin(), constraints.end(), [&](const CATEntry& entry) { return checkCATEntryConflict(entry, sourceCATEntry); })) return nullptr;
-			if (cat.checkConflict(sourceCATEntry)) return nullptr;
+			if (node->cat.checkConflict(sourceCATEntry)) return nullptr;
 
 			const auto& destinationPath = node->solution[path.destination.index];
-			auto best = findPathEdgeWithContext(destinationPath, sourceEndpoint.coordinate, node, cat, constraints);
+			auto best = findPathEdgeWithContext(destinationPath, sourceEndpoint.coordinate, node, constraints);
 			if (std::get<0>(best) == false) return nullptr;
 
 			PathfindingGoal goal{
@@ -757,7 +738,7 @@ namespace impl
 		const auto sourceCATEntry = calculateCATEntry(sourceEndpoint.coordinate, BeltType::Conveyor, Direction::N);
 		const auto destinationCATEntry = calculateCATEntry(destinationEndpoint.coordinate, BeltType::Conveyor, Direction::N);
 		if (std::any_of(constraints.begin(), constraints.end(), [&](const CATEntry& entry) { return checkCATEntryConflict(entry, sourceCATEntry) || checkCATEntryConflict(entry, destinationCATEntry); })) return nullptr;
-		if (cat.checkConflict(sourceCATEntry) || cat.checkConflict(destinationCATEntry)) return nullptr;
+		if (node->cat.checkConflict(sourceCATEntry) || node->cat.checkConflict(destinationCATEntry)) return nullptr;
 
 		PathfindingGoal goal{
 			destinationEndpoint.coordinate,
@@ -769,7 +750,7 @@ namespace impl
 		return new PathfindingState(blockedGrid, node->constraints[pathIndex], goal, PathfindingData{ sourceEndpoint.coordinate, BeltType::None, Direction::N });
 	}
 
-	std::tuple<bool, Coordinate, Direction> PlacementPathfinder::findPathEdgeWithContext(const std::shared_ptr<pf::Path<PathfindingData>>& path, const Coordinate& target, const std::shared_ptr<CTNode>& node, const CAT& cat, const std::vector<CATEntry>& constraints)
+	std::tuple<bool, Coordinate, Direction> PlacementPathfinder::findPathEdgeWithContext(const std::shared_ptr<pf::Path<PathfindingData>>& path, const Coordinate& target, const std::shared_ptr<CTNode>& node, const std::vector<CATEntry>& constraints)
 	{
 		// Look for the closest edge of the path to the target
 		float bestDistance = std::numeric_limits<float>::max();
@@ -795,7 +776,7 @@ namespace impl
 					// Only if not blocked, constrained, or have conflicting CAT entries
 					if (newCoord.x < 0 || newCoord.x >= blockedGrid.size() || newCoord.y < 0 || newCoord.y >= blockedGrid[0].size()) continue;
 					if (blockedGrid[newCoord.x][newCoord.y]) continue;
-					if (cat.checkConflict(catEntry)) continue;
+					if (node->cat.checkConflict(catEntry)) continue;
 					if (std::any_of(constraints.begin(), constraints.end(), [&](const CATEntry& entry) { return checkCATEntryConflict(entry, catEntry); })) continue;
 
 					// Check the extra space is also valid
@@ -804,7 +785,7 @@ namespace impl
 
 					if (extraCoord.x < 0 || extraCoord.x >= blockedGrid.size() || extraCoord.y < 0 || extraCoord.y >= blockedGrid[0].size()) continue;
 					if (blockedGrid[extraCoord.x][extraCoord.y]) continue;
-					if (cat.checkConflict(extraCatEntry)) continue;
+					if (node->cat.checkConflict(extraCatEntry)) continue;
 					if (std::any_of(constraints.begin(), constraints.end(), [&](const CATEntry& entry) { return checkCATEntryConflict(entry, extraCatEntry); })) continue;
 
 					// Check distance to target

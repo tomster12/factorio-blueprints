@@ -8,11 +8,11 @@
       <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
       <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
     </Filter>
+    <Filter Include="main">
+      <UniqueIdentifier>{2111493a-a8ab-495f-9a08-4d1221f195e2}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp">
-      <Filter>impl</Filter>
-    </ClCompile>
     <ClCompile Include="PlacementPathfinder.cpp">
       <Filter>impl</Filter>
     </ClCompile>
@@ -25,6 +25,9 @@
     <ClCompile Include="global.cpp">
       <Filter>impl</Filter>
     </ClCompile>
+    <ClCompile Include="main.cpp">
+      <Filter>main</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pf.h">
@@ -35,9 +38,6 @@
     </ClInclude>
     <ClInclude Include="log.h">
       <Filter>lib</Filter>
-    </ClInclude>
-    <ClInclude Include="macros.h">
-      <Filter>impl</Filter>
     </ClInclude>
     <ClInclude Include="PlacementPathfinder.h">
       <Filter>impl</Filter>
@@ -53,6 +53,9 @@
     </ClInclude>
     <ClInclude Include="global.h">
       <Filter>impl</Filter>
+    </ClInclude>
+    <ClInclude Include="macros.h">
+      <Filter>main</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
