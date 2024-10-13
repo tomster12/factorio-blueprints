@@ -4,23 +4,23 @@
     <Filter Include="lib">
       <UniqueIdentifier>{610b42dc-2ec5-4b51-bc4c-58d4ccb373ce}</UniqueIdentifier>
     </Filter>
-    <Filter Include="main">
+    <Filter Include="impl">
       <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
       <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
     </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
-      <Filter>main</Filter>
+      <Filter>impl</Filter>
     </ClCompile>
-    <ClCompile Include="CBPathfinder.cpp">
-      <Filter>main</Filter>
+    <ClCompile Include="PlacementPathfinder.cpp">
+      <Filter>impl</Filter>
     </ClCompile>
-    <ClCompile Include="LSState.cpp">
-      <Filter>main</Filter>
+    <ClCompile Include="PlacementState.cpp">
+      <Filter>impl</Filter>
     </ClCompile>
     <ClCompile Include="ProblemSolver.cpp">
-      <Filter>main</Filter>
+      <Filter>impl</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -30,29 +30,26 @@
     <ClInclude Include="ls.h">
       <Filter>lib</Filter>
     </ClInclude>
-    <ClInclude Include="DataLogger.h">
-      <Filter>lib</Filter>
-    </ClInclude>
     <ClInclude Include="log.h">
       <Filter>lib</Filter>
     </ClInclude>
     <ClInclude Include="macros.h">
-      <Filter>main</Filter>
+      <Filter>impl</Filter>
     </ClInclude>
-    <ClInclude Include="CBPathfinder.h">
-      <Filter>main</Filter>
+    <ClInclude Include="PlacementPathfinder.h">
+      <Filter>impl</Filter>
     </ClInclude>
-    <ClInclude Include="LSState.h">
-      <Filter>main</Filter>
+    <ClInclude Include="PlacementState.h">
+      <Filter>impl</Filter>
     </ClInclude>
     <ClInclude Include="ProblemSolver.h">
-      <Filter>main</Filter>
+      <Filter>impl</Filter>
     </ClInclude>
     <ClInclude Include="types.h">
-      <Filter>main</Filter>
+      <Filter>impl</Filter>
     </ClInclude>
     <ClInclude Include="global.h">
-      <Filter>main</Filter>
+      <Filter>impl</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

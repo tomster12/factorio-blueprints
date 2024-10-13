@@ -12,11 +12,13 @@ namespace ls
 	class State
 	{
 	public:
-		bool operator==(State<T>& other) const { return getHash() == other.getHash(); }
 		virtual float getFitness() = 0;
 		virtual std::vector<std::shared_ptr<T>> getNeighbours() = 0;
-		virtual size_t getHash() = 0;
-		virtual std::vector<float> generateDataLog() = 0;
+		size_t getHash() const { return hash; }
+		bool operator==(State<T>& other) const { return hash == other.hash; }
+
+	protected:
+		size_t hash = 0;
 	};
 
 	template<typename T>
@@ -41,12 +43,12 @@ namespace ls
 	{
 		static_assert(std::is_base_of<State<T>, T>::value, "T must be a subclass of State<T>.");
 
-		// Initialize with start state
+		// Initialize with start
 		StateCache<T> cache;
 		std::shared_ptr<T> current = cache.getCached(start);
 		LOG(LOCAL_SEARCH, "Start, fitness: " << current->getFitness() << "\n");
 
-		// Until max iterations or local maximum
+		// Loop until max iterations or local maximum
 		std::shared_ptr<T> best = start;
 		size_t it = 0;
 		for (; it < maxIterations; it++)
@@ -86,12 +88,12 @@ namespace ls
 	{
 		static_assert(std::is_base_of<State<T>, T>::value, "T must be a subclass of State<T>.");
 
-		// Initialize with start state
+		// Initialize with start
 		StateCache<T> cache;
 		std::shared_ptr<T> current = cache.getCached(start);
 		LOG(LOCAL_SEARCH, "Start, fitness: " << current->getFitness() << "\n");
 
-		// Until max iterations or local maximum
+		// Loop until max iterations or local maximum
 		size_t it = 0;
 		std::shared_ptr<T> best = start;
 		for (; it < maxIterations && temperature > 0.01f; it++)

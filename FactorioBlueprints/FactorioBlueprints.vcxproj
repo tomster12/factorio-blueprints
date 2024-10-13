@@ -126,15 +126,15 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="CBPathfinder.cpp" />
-    <ClCompile Include="LSState.cpp" />
+    <ClCompile Include="PlacementPathfinder.cpp" />
+    <ClCompile Include="PlacementState.cpp" />
     <ClCompile Include="ProblemSolver.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="CBPathfinder.h" />
+    <ClInclude Include="PlacementPathfinder.h" />
     <ClInclude Include="global.h" />
-    <ClInclude Include="LSState.h" />
+    <ClInclude Include="PlacementState.h" />
     <ClInclude Include="log.h" />
     <ClInclude Include="macros.h" />
     <ClInclude Include="ProblemSolver.h" />

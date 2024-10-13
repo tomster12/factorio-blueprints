@@ -4,6 +4,8 @@
 #include <queue>
 #include <unordered_set>
 #include <deque>
+#include "log.h"
+#include "macros.h"
 
 namespace pf
 {
@@ -22,23 +24,22 @@ namespace pf
 	{
 	public:
 		State(D data, T* parent)
-			: data(std::move(data)), parent(parent), dataHash(data.getHash())
+			: data(std::move(data)), parent(parent), hash(data.getHash())
 		{}
-		bool operator==(T& other) const { dataHash = other.dataHash; }
 		virtual bool isGoal() = 0;
 		virtual float getFCost() = 0;
 		virtual float getGCost() = 0;
 		virtual float getHCost() = 0;
 		virtual std::vector<D*> getNeighbours() = 0;
 		const D& getData() const { return data; }
-		D moveData() { return std::move(data); }
-		size_t getDataHash() const { return dataHash; }
 		T* getParent() const { return parent; }
+		size_t getHash() const { return hash; }
+		D moveData() { return std::move(data); }
 
 	protected:
 		D data;
 		T* parent;
-		size_t dataHash;
+		size_t hash;
 	};
 
 	template<typename D>
@@ -54,14 +55,14 @@ namespace pf
 		template<typename T>
 		bool operator()(T* a, T* b) const
 		{
-			return a->getFCost() > b->getFCost(); // Assuming lower f cost is better
+			// Assuming lower f cost is better
+			return a->getFCost() > b->getFCost();
 		}
 	};
 
 	template<typename T, typename D>
-	std::shared_ptr<Path<D>> asPathfinding(T* start, bool toLog = false)
+	std::shared_ptr<Path<D>> asPathfinding(T* start)
 	{
-		// Start open set with start node
 		std::priority_queue<T*, std::vector<T*>, CompareNodeByFCost> openSet;
 		std::unordered_set<size_t> closedSetHash;
 		std::unordered_set<size_t> openSetHash;
@@ -69,16 +70,17 @@ namespace pf
 
 		allNodes.push_back(start);
 		openSet.push(start);
-		openSetHash.insert(start->getDataHash());
+		openSetHash.insert(start->getHash());
+		LOG(PATHFINDING, "Start, G Cost: " << start->getGCost() << "\n");
 
 		// Until open set is empty
 		while (!openSet.empty())
 		{
 			// Get node with lowest f cost
 			T* current = openSet.top();
-			openSet.pop();
+			LOG(PATHFINDING, "Current, G Cost: " << current->getGCost() << ", H Cost: " << current->getHCost() << ", F Cost: " << current->getFCost() << "\n");
 
-			// Found goal
+			// Found goal so extract path and cleanup nodes
 			if (current->isGoal())
 			{
 				std::shared_ptr<Path<D>> path = std::make_shared<Path<D>>();
@@ -90,18 +92,18 @@ namespace pf
 					path->cost += node->getGCost();
 					node = node->getParent();
 				}
+				for (T* node : allNodes) delete node;
 
+				LOG(PATHFINDING, "Path found, cost: " << path->cost << "\n");
 				std::reverse(path->nodes.begin(), path->nodes.end());
 				path->found = true;
-
-				// Cleanup and return with path
-				for (T* node : allNodes) delete node;
 				return path;
 			}
 
-			// Delete current and remove from open set
-			openSetHash.erase(current->getDataHash());
-			closedSetHash.insert(current->getDataHash());
+			// Remove from open and add to closed
+			openSet.pop();
+			openSetHash.erase(current->getHash());
+			closedSetHash.insert(current->getHash());
 
 			// Add neighbours to open if not in open or closed set
 			const auto neighbours = current->getNeighbours();
@@ -115,7 +117,7 @@ namespace pf
 				T* neighbour = new T(*neighbourDataPtr, current);
 				allNodes.push_back(neighbour);
 				openSet.push(neighbour);
-				openSetHash.insert(neighbour->getDataHash());
+				openSetHash.insert(neighbour->getHash());
 			}
 		}
 

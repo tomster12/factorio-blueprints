@@ -4,8 +4,10 @@
 #include "macros.h"
 #include "types.h"
 #include "ProblemSolver.h"
-#include "CBPathfinder.h"
-#include "LSState.h"
+#include "PlacementPathfinder.h"
+#include "PlacementState.h"
+
+using namespace impl;
 
 void checkPathfinding();
 void solveExampleProblem1();
@@ -15,7 +17,7 @@ void solveExampleProblem3();
 int main()
 {
 	srand(SRAND_SEED);
-	solveExampleProblem2();
+	solveExampleProblem3();
 }
 
 void solveExampleProblem1()
@@ -94,7 +96,7 @@ void checkPathfinding()
 
 	// Make initial state and perform pathfinding
 	auto initialState = new PFState(blockedGrid, constraints, goal, PFData{ Coordinate{ 0, 0 }, BeltType::None, Direction::E });
-	auto path = pf::asPathfinding<PFState, PFData>(initialState, true);
+	auto path = pf::asPathfinding<PFState, PFData>(initialState);
 
 	// Print path
 	for (const auto& nodeData : path->nodes) nodeData.print();
@@ -125,19 +127,16 @@ void checkCBPathfinding()
 	runConfig.itemConfigs[2] = { 2, 1, 1, 0.5f, { { 0, { 1, 1.0f } }, { 1, { 1, 1.0f }}} };
 
 	// Setup local search state with pre-placed assemblers
-	LSState::InserterInstance none{ -1, false };
-	std::vector<LSState::AssemblerInstance> assemblers;
+	PlacementState::InserterInstance none{ -1, false };
+	std::vector<PlacementState::AssemblerInstance> assemblers;
 	assemblers.push_back({ 1, { 5, 0 }, { none, none, none, none, none, { 1, 0.5f, false }, { 0, 0.5f, true }, none, none, none, none, none } });
 	assemblers.push_back({ 1, { 3, 7 }, { none, none, none, { 0, 0.5f, true }, none, none, none, none, none, none, none, { 1, 0.5f, false } } });
 	assemblers.push_back({ 2, { 2, 4 }, { none, none, { 0, 1.0f, true }, { 2, 0.5f, false }, none, none, none, none, none, none, { 1, 1.0f, true }, none } });
 
 	// Check that the state is valid
-	std::shared_ptr<LSState> state = std::make_shared<LSState>(problem, runConfig, assemblers);
+	std::shared_ptr<PlacementState> state = std::make_shared<PlacementState>(problem, runConfig, assemblers);
 	state->print();
 
 	// Request cost to trigger pathfinding to check it works
 	std::cout << "State fitness: " << state->getFitness() << std::endl;
 }
-
-//std::unordered_map<size_t, std::vector<std::pair<PFData, CATEntry>>> PFState::neighbourCache = std::unordered_map<size_t, std::vector<std::pair<PFData, CATEntry>>>();
-//std::map<size_t, std::shared_ptr<T>> State<T>::cachedStates;
