@@ -1,25 +1,61 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="Main">
+    <Filter Include="lib">
+      <UniqueIdentifier>{610b42dc-2ec5-4b51-bc4c-58d4ccb373ce}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="impl">
       <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
       <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
     </Filter>
+    <Filter Include="main">
+      <UniqueIdentifier>{2111493a-a8ab-495f-9a08-4d1221f195e2}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="FactorioBlueprints.cpp">
-      <Filter>Main</Filter>
+    <ClCompile Include="PlacementPathfinder.cpp">
+      <Filter>impl</Filter>
+    </ClCompile>
+    <ClCompile Include="PlacementState.cpp">
+      <Filter>impl</Filter>
+    </ClCompile>
+    <ClCompile Include="ProblemSolver.cpp">
+      <Filter>impl</Filter>
+    </ClCompile>
+    <ClCompile Include="global.cpp">
+      <Filter>impl</Filter>
+    </ClCompile>
+    <ClCompile Include="main.cpp">
+      <Filter>main</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="LocalSearch.h">
-      <Filter>Main</Filter>
+    <ClInclude Include="pf.h">
+      <Filter>lib</Filter>
     </ClInclude>
-    <ClInclude Include="Pathfinding.h">
-      <Filter>Main</Filter>
+    <ClInclude Include="ls.h">
+      <Filter>lib</Filter>
     </ClInclude>
-    <ClInclude Include="DataLogger.h">
-      <Filter>Main</Filter>
+    <ClInclude Include="log.h">
+      <Filter>lib</Filter>
+    </ClInclude>
+    <ClInclude Include="PlacementPathfinder.h">
+      <Filter>impl</Filter>
+    </ClInclude>
+    <ClInclude Include="PlacementState.h">
+      <Filter>impl</Filter>
+    </ClInclude>
+    <ClInclude Include="ProblemSolver.h">
+      <Filter>impl</Filter>
+    </ClInclude>
+    <ClInclude Include="types.h">
+      <Filter>impl</Filter>
+    </ClInclude>
+    <ClInclude Include="global.h">
+      <Filter>impl</Filter>
+    </ClInclude>
+    <ClInclude Include="macros.h">
+      <Filter>main</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
