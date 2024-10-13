@@ -27,14 +27,18 @@
 // Optimization Notes
 // - First step:
 //   - performPathfinding() first initializes an empty node with all the paths set to be calculated
-//   - The calculateNode() function then calculates the paths in order and updates the global solutions
+//   - The calculateNode() function then calculates the paths in order and updates the node solutions
 //   - The solutions are copied into the node CAT and conflicts are found
 //   - The node is then added to the open set if valid
-// - Now each loop we pop one off stack, split into 2 new nodes, calculate each, and add onto stack
+// - Now each loop:
+//   - Pop a node off stack
+//   - Split into 2 new nodes on the found conflict
+//   - Copy existing solutions into nodes
+//   - Calculate each and add onto stack
+//
 // - The majority of the time taken is as follows:
 //   - 47% Calculating the pathfinding
-//   - 29% Copying existing solutions to CAT
-//   - 6% Copying new solution to CAT
+//   - 35% Copying solutions into CAT
 
 namespace impl
 {
@@ -316,7 +320,7 @@ namespace impl
 
 	void PlacementPathfinder::print()
 	{
-		std::cout << "--- CB Pathfinding ---" << std::endl << std::endl;
+		std::cout << "--- CB Pathfinding Search Log ---" << std::endl << std::endl;
 
 		if (!finalSolutionFound)
 		{
@@ -378,15 +382,15 @@ namespace impl
 	{
 		pathConfigs = std::vector<PathConfig>();
 
-		LOG(LOW, "--- CB Item Endpoints ---\n");
+		LOG(CB_PATHS, "  --- CB Item Endpoints ---\n");
 		for (size_t i = 0; i < this->itemEndpoints.size(); i++)
 		{
-			LOG(LOW, "Endpoint " << i << ": item " << this->itemEndpoints[i].item
+			LOG(CB_PATHS, "  Endpoint " << i << ": item " << this->itemEndpoints[i].item
 				<< " at (" << this->itemEndpoints[i].coordinate.x << ", " << this->itemEndpoints[i].coordinate.y << ") "
 				<< (this->itemEndpoints[i].isSource ? "source" : "destination")
 				<< " @ " << this->itemEndpoints[i].rate << "/s\n");
 		}
-		LOG(LOW, "\n--- CB Endpoint Processing ---\n");
+		LOG(CB_PATHS, "  --- CB Endpoint Processing ---\n");
 
 		// Seperate end points by item
 		std::map<int, std::vector<size_t>> itemsEndpoints = std::map<int, std::vector<size_t>>();
@@ -486,36 +490,36 @@ namespace impl
 				}
 
 				// LOGGING: Picked choices and path
-				LOG(LOW, "Current: index " << currentIndex << ", item " << current.item << " at (" << current.coordinate.x << ", " << current.coordinate.y << ") "
+				LOG(CB_PATHS, "  Current: index " << currentIndex << ", item " << current.item << " at (" << current.coordinate.x << ", " << current.coordinate.y << ") "
 					<< (current.isSource ? "source" : "destination") << " @ " << current.rate << "/s\n");
 				if (bestEndpoint.type == ConcreteEndpoint::Type::ITEM)
 				{
 					const ItemEndpoint& other = this->itemEndpoints[bestEndpoint.index];
-					LOG(LOW, "Other (world): index " << bestEndpoint.index << " at (" << other.coordinate.x << ", " << other.coordinate.y << ") "
+					LOG(CB_PATHS, "  Other (world): index " << bestEndpoint.index << " at (" << other.coordinate.x << ", " << other.coordinate.y << ") "
 						<< (other.isSource ? "source" : "destination") << " @ " << other.rate << "/s\n");
 				}
 				else
 				{
 					const PathConfig& path = this->pathConfigs[bestEndpoint.index];
 					float groupSpareRate = this->pathGroupSpareRates[path.pathGroup];
-					LOG(LOW, "Other (path): index " << bestEndpoint.index << " spare rate @ " << groupSpareRate << "/s\n");
+					LOG(CB_PATHS, "  Other (path): index " << bestEndpoint.index << " spare rate @ " << groupSpareRate << "/s\n");
 				}
-				LOG(LOW, "Created path: index " << pathIndex << " group " << pathGroup << " new spare rate @ " << bestSpareRate << "/s\n\n");
+				LOG(CB_PATHS, "  Created path: index " << pathIndex << " group " << pathGroup << " new spare rate @ " << bestSpareRate << "/s\n");
 
 				// Update the spare rate of the path group
 				this->pathGroupSpareRates[pathGroup] = bestSpareRate;
 			}
 		}
 
-		LOG(LOW, "--- Final Path configs ---\n");
+		LOG(CB_PATHS, "  --- Final Path configs ---\n");
 		for (size_t i = 0; i < this->pathConfigs.size(); i++)
 		{
 			const PathConfig& path = this->pathConfigs[i];
-			LOG(LOW, "Path " << i << ": group " << path.pathGroup << " from [");
+			LOG(CB_PATHS, "  Path " << i << " (group " << path.pathGroup << "): [");
 			if (path.source.type == ConcreteEndpoint::Type::ITEM)
 			{
 				const ItemEndpoint& source = this->itemEndpoints[path.source.index];
-				LOG(LOW, "index " << path.source.index << " item " << source.item
+				LOG(CB_PATHS, "  index " << path.source.index << " item " << source.item
 					<< " at (" << source.coordinate.x << ", " << source.coordinate.y << ") "
 					<< (source.isSource ? "source" : "destination")
 					<< " @ " << source.rate << "/s");
@@ -523,13 +527,13 @@ namespace impl
 			else
 			{
 				const PathConfig& source = this->pathConfigs[path.source.index];
-				LOG(LOW, "index " << path.source.index << " group " << source.pathGroup << " @ " << this->pathGroupSpareRates[source.pathGroup] << "/s");
+				LOG(CB_PATHS, "index " << path.source.index << " group " << source.pathGroup << " @ " << this->pathGroupSpareRates[source.pathGroup] << "/s");
 			}
-			LOG(LOW, "] to [");
+			LOG(CB_PATHS, "] to [");
 			if (path.destination.type == ConcreteEndpoint::Type::ITEM)
 			{
 				const ItemEndpoint& destination = this->itemEndpoints[path.destination.index];
-				LOG(LOW, "index " << path.destination.index << " item " << destination.item
+				LOG(CB_PATHS, "index " << path.destination.index << " item " << destination.item
 					<< " at (" << destination.coordinate.x << ", " << destination.coordinate.y << ") "
 					<< (destination.isSource ? "source" : "destination")
 					<< " @ " << destination.rate << "/s");
@@ -537,23 +541,22 @@ namespace impl
 			else
 			{
 				const PathConfig& destination = this->pathConfigs[path.destination.index];
-				LOG(LOW, "index " << path.destination.index << " group " << destination.pathGroup << " @ " << this->pathGroupSpareRates[destination.pathGroup] << "/s");
+				LOG(CB_PATHS, "index " << path.destination.index << " group " << destination.pathGroup << " @ " << this->pathGroupSpareRates[destination.pathGroup] << "/s");
 			}
-			LOG(LOW, "]\n");
+			LOG(CB_PATHS, "]\n");
 		}
-		LOG(LOW, "\n");
 	}
 
 	void PlacementPathfinder::performPathfinding()
 	{
-		LOG(LOW, "--- CB Pathfinding ---\n\n");
+		LOG(CB_SEARCH, "  --- CB Pathfinding Search ---\n");
 
 		// NOTE
 		// A CTNode will be invalid if a path config cannot be resolved
 		// The openSet will eventually be empty if all the CTNodes end up invalid
 		// This would happen in a solution with no conflicts but some paths invalid
 
-		// Initialize root and early exit if invalid
+		// Initialize root with all paths, calculate, exit early if invalid
 		auto root = std::make_shared<CTNode>();
 		root->isValid = true;
 		for (size_t i = 0; i < this->pathConfigs.size(); i++) root->pathsToCalculate.push_back(i);
@@ -576,12 +579,12 @@ namespace impl
 			}
 			openSet.erase(std::remove(openSet.begin(), openSet.end(), current), openSet.end());
 
-			LOG(LOW, "Open set: " << openSet.size() << ", cost: " << current->cost << ", Constraints: ( ");
+			LOG(CB_SEARCH, "  Open set: " << openSet.size() << ", cost: " << current->cost << ", Constraints: ( ");
 			for (const auto& entry : current->constraints)
 			{
-				LOG(LOW, entry.second.size() << " ");
+				LOG(CB_SEARCH, entry.second.size() << " ");
 			}
-			LOG(LOW, ")\n");
+			LOG(CB_SEARCH, ")\n");
 
 			// If no conflict, have found a solution
 			if (!current->firstConflict.isConflict)
@@ -600,8 +603,6 @@ namespace impl
 				next->constraints = current->constraints;
 				next->solution = current->solution;
 				next->cost = current->cost;
-
-				// Set the path to calculate and add the constraint
 				next->pathsToCalculate = { pathIndex };
 				next->constraints[pathIndex].push_back(current->firstConflict.catEntry);
 
@@ -614,36 +615,34 @@ namespace impl
 		// No solution without conflicts found, fitness = 0
 		if (!this->finalSolutionFound)
 		{
-			LOG(LOW, "\nNo solution found\n\n");
+			LOG(CB_SEARCH, "\n  No solution found\n\n");
 			fitness = 0.0f;
 			return;
 		}
 
+		LOG(CB_SEARCH, "  Solution found\n");
+
 		// Solution found, fitness = sum (1 + shortest / real)
-		LOG(LOW, "\nSolution found\n\n");
 		fitness = 0.0f;
 		for (size_t i = 0; i < this->pathConfigs.size(); i++)
 		{
 			if (!this->finalSolution->solution[i]->found)
 			{
-				LOG(LOW, "Path " << i << " in the solution, could not found\n");
+				LOG(CB_PATHS, "  Path " << i << " in the solution, could not found\n");
 				continue;
 			}
 
+			// Its possible with underground belts to have a lower cost, but cap it to max
 			const auto& first = this->finalSolution->solution[i]->nodes[0];
 			const auto& last = this->finalSolution->solution[i]->nodes.back();
 			float shortest = pf::ManhattanDistance((float)first.coordinate.x, (float)first.coordinate.y, (float)last.coordinate.x, (float)last.coordinate.y);
 			float real = this->finalSolution->solution[i]->cost;
-
-			// Its possible with underground belts to have a lower cost, but cap it to max
 			real = std::max(real, shortest);
-
 			if (shortest == 0) fitness += 2.0f;
 			else fitness += (1.0f + shortest / real);
 
-			LOG(LOW, "Path " << i << " in the solution, shortest " << shortest << ", real " << real << ", fitness " << (1.0f + shortest / real) << "\n");
+			LOG(CB_PATHS, "  Path " << i << " in the solution, shortest " << shortest << ", real " << real << ", fitness " << (1.0f + shortest / real) << "\n");
 		}
-		LOG(LOW, "\n");
 	}
 
 	void PlacementPathfinder::calculateNode(std::shared_ptr<CTNode> node)
@@ -691,7 +690,7 @@ namespace impl
 		// Calculate each path in order and update CAT and cost
 		for (size_t pathIndex : calculateOrder)
 		{
-			auto source = resolvePathConfig(pathIndex, node, cat);
+			auto source = initPathNodeWithContext(pathIndex, node, cat);
 			if (source == nullptr) return;
 
 			node->solution[pathIndex] = pf::asPathfinding<PFState, PFData>(source);
@@ -719,14 +718,14 @@ namespace impl
 		node->isValid = true;
 	}
 
-	PFState* PlacementPathfinder::resolvePathConfig(size_t pathIndex, const std::shared_ptr<CTNode>& node, const CAT& cat)
+	PFState* PlacementPathfinder::initPathNodeWithContext(size_t pathIndex, const std::shared_ptr<CTNode>& node, const CAT& cat)
 	{
-		// Attempt to resolve the path considering the given node
-		// Return nullptr is conflicts and constraints prevent resolution
+		// Attempt to resolve the path considering the given CT node
+		// Return nullptr if conflicts and constraints prevent resolution
 		const PathConfig& path = this->pathConfigs[pathIndex];
 		const auto& constraints = node->constraints[pathIndex];
 
-		// Position of destination -> goal, resolve closest source path edge -> PFState
+		// Path -> Endpoint, resolve closest source path edge
 		if (path.source.type == ConcreteEndpoint::Type::PATH)
 		{
 			const ItemEndpoint& destinationEndpoint = this->itemEndpoints[path.destination.index];
@@ -736,7 +735,7 @@ namespace impl
 			if (cat.checkConflict(destinationCATEntry)) return nullptr;
 
 			const auto& sourcePath = node->solution[path.source.index];
-			auto best = resolveBestPathEdge(sourcePath, destinationEndpoint.coordinate, node, cat, constraints);
+			auto best = findPathEdgeWithContext(sourcePath, destinationEndpoint.coordinate, node, cat, constraints);
 			if (std::get<0>(best) == false) return nullptr;
 
 			PFGoal goal{
@@ -750,7 +749,7 @@ namespace impl
 			return new PFState(blockedGrid, node->constraints[pathIndex], goal, PFData{ std::get<1>(best), BeltType::Inserter, std::get<2>(best) });
 		}
 
-		// Position of source -> PFState, resolve closest destination path edge -> goal
+		// Endpoint -> Path, resolve closest destination path edge
 		if (path.destination.type == ConcreteEndpoint::Type::PATH)
 		{
 			const ItemEndpoint& sourceEndpoint = this->itemEndpoints[path.source.index];
@@ -760,7 +759,7 @@ namespace impl
 			if (cat.checkConflict(sourceCATEntry)) return nullptr;
 
 			const auto& destinationPath = node->solution[path.destination.index];
-			auto best = resolveBestPathEdge(destinationPath, sourceEndpoint.coordinate, node, cat, constraints);
+			auto best = findPathEdgeWithContext(destinationPath, sourceEndpoint.coordinate, node, cat, constraints);
 			if (std::get<0>(best) == false) return nullptr;
 
 			PFGoal goal{
@@ -773,7 +772,7 @@ namespace impl
 			return new PFState(blockedGrid, node->constraints[pathIndex], goal, PFData{ sourceEndpoint.coordinate, BeltType::None, Direction::N });
 		}
 
-		// Position of source -> PFState, position of destination -> goal
+		// Endpoint -> Endpoint
 		const ItemEndpoint& sourceEndpoint = this->itemEndpoints[path.source.index];
 		const ItemEndpoint& destinationEndpoint = this->itemEndpoints[path.destination.index];
 
@@ -792,7 +791,7 @@ namespace impl
 		return new PFState(blockedGrid, node->constraints[pathIndex], goal, PFData{ sourceEndpoint.coordinate, BeltType::None, Direction::N });
 	}
 
-	std::tuple<bool, Coordinate, Direction> PlacementPathfinder::resolveBestPathEdge(const std::shared_ptr<pf::Path<PFData>>& path, const Coordinate& target, const std::shared_ptr<CTNode>& node, const CAT& cat, const std::vector<CATEntry>& constraints)
+	std::tuple<bool, Coordinate, Direction> PlacementPathfinder::findPathEdgeWithContext(const std::shared_ptr<pf::Path<PFData>>& path, const Coordinate& target, const std::shared_ptr<CTNode>& node, const CAT& cat, const std::vector<CATEntry>& constraints)
 	{
 		// Look for the closest edge of the path to the target
 		float bestDistance = std::numeric_limits<float>::max();

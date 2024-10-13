@@ -17,7 +17,7 @@ void solveExampleProblem3();
 int main()
 {
 	srand(SRAND_SEED);
-	solveExampleProblem3();
+	solveExampleProblem2();
 }
 
 void solveExampleProblem1()

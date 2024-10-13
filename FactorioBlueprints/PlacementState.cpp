@@ -146,7 +146,7 @@ namespace impl
 	{
 		calculateWorld();
 
-		std::cout << "--- Local State World ---" << std::endl << std::endl;
+		std::cout << "--- Placement State World Log ---" << std::endl << std::endl;
 
 		HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 
@@ -177,7 +177,7 @@ namespace impl
 		SetConsoleTextAttribute(hConsole, 15);
 		std::cout << std::endl;
 
-		std::cout << "--- Local State Data ---" << std::endl << std::endl;
+		std::cout << "--- Placement State Data Log ---" << std::endl << std::endl;
 
 		for (const auto& assembler : assemblers)
 		{

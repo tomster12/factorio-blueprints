@@ -2,6 +2,7 @@
 #include <map>
 #include <stack>
 #include <string>
+#include <chrono>
 #include "ProblemSolver.h"
 #include "types.h"
 #include "log.h"
@@ -311,18 +312,20 @@ namespace impl
 		LOG(SOLVER, "Stage: performSearch()\n"
 			<< "=======================\n\n");
 
-		// for (int i = bestRunConfig; i > 0; i--)
-		for (int i = 1; i <= bestRunConfig; i++)
+		for (int i = bestRunConfig; i > 0; i--)
+			//for (int i = 1; i <= bestRunConfig; i++)
 		{
 			LOG(SOLVER, "--- Evaluating run config " << i << " ---\n\n");
 
 			const RunConfig& runConfig = possibleRunConfigs.at(i);
 
+			Global::evalCountLS = 0;
 			Global::evalCountCBP = 0;
 			Global::evalCountPF = 0;
-			Global::evalCountLS = 0;
 
 			std::shared_ptr<PlacementState> initialState = PlacementState::createRandom(problem, runConfig);
+
+			auto start = std::chrono::high_resolution_clock::now();
 
 			#if USE_ANNEALING
 			std::shared_ptr<PlacementState> finalState = ls::simulatedAnnealing(initialState, ANNEALING_TEMP, ANNEALING_COOLING, ANNEALING_ITERATIONS);
@@ -330,12 +333,16 @@ namespace impl
 			std::shared_ptr<PlacementState> finalState = ls::hillClimbing(initialState, HILLCLIMBING_ITERATIONS);
 			#endif
 
-			LOG(SOLVER, "Finished evaluation, summary:\n\n");
+			auto end = std::chrono::high_resolution_clock::now();
+			auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+			LOG(SOLVER, "Finished evaluation\n");
+			LOG(SOLVER, "- Time taken: " << duration.count() << "ms\n");
 			LOG(SOLVER, "- PlacementState Evaluation count: " << Global::evalCountLS << "\n");
 			LOG(SOLVER, "- PlacementPathfinder Evaluation count: " << Global::evalCountCBP << "\n");
 			LOG(SOLVER, "- PFState Evaluation count: " << Global::evalCountPF << "\n");
 			LOG(SOLVER, "- Final state fitness: " << finalState->getFitness() << "\n\n");
-			if (LOG_SOLVER_ENABLED) finalState->print();
+			if (LOG_SOLVER_DETAILS_ENABLED) finalState->print();
 		}
 	}
 }

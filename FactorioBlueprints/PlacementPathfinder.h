@@ -14,6 +14,9 @@ namespace impl
 	struct CATEntry
 	{
 		size_t coordinateHash;
+		// 0b001 -> Above ground
+		// 0b010 -> North/South underground
+		// 0b100 -> East/West underground
 		size_t conflictFlags;
 	};
 
@@ -177,9 +180,9 @@ namespace impl
 		{
 			bool isValid = true;
 			std::vector<size_t> pathsToCalculate{};
-			CTConflict firstConflict{};
 			std::map<size_t, std::vector<CATEntry>> constraints{};
 			std::map<size_t, std::shared_ptr<pf::Path<PFData>>> solution{};
+			CTConflict firstConflict{};
 			float cost = 0.0f;
 		};
 
@@ -204,7 +207,7 @@ namespace impl
 		void preprocessPaths();
 		void performPathfinding();
 		void calculateNode(std::shared_ptr<CTNode> node);
-		PFState* resolvePathConfig(size_t pathIndex, const std::shared_ptr<CTNode>& node, const CAT& cat);
-		std::tuple<bool, Coordinate, Direction> resolveBestPathEdge(const std::shared_ptr<pf::Path<PFData>>& path, const Coordinate& target, const std::shared_ptr<CTNode>& node, const CAT& cat, const std::vector<CATEntry>& constraints);
+		PFState* initPathNodeWithContext(size_t pathIndex, const std::shared_ptr<CTNode>& node, const CAT& cat);
+		std::tuple<bool, Coordinate, Direction> findPathEdgeWithContext(const std::shared_ptr<pf::Path<PFData>>& path, const Coordinate& target, const std::shared_ptr<CTNode>& node, const CAT& cat, const std::vector<CATEntry>& constraints);
 	};
 }

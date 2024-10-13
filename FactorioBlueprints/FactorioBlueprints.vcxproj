@@ -126,6 +126,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="global.cpp" />
     <ClCompile Include="PlacementPathfinder.cpp" />
     <ClCompile Include="PlacementState.cpp" />
     <ClCompile Include="ProblemSolver.cpp" />
