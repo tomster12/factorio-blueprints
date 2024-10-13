@@ -340,7 +340,7 @@ namespace impl
 			LOG(SOLVER, "- Time taken: " << duration.count() << "ms\n");
 			LOG(SOLVER, "- PlacementState Evaluation count: " << Global::evalCountLS << "\n");
 			LOG(SOLVER, "- PlacementPathfinder Evaluation count: " << Global::evalCountCBP << "\n");
-			LOG(SOLVER, "- PFState Evaluation count: " << Global::evalCountPF << "\n");
+			LOG(SOLVER, "- PathfindingState Evaluation count: " << Global::evalCountPF << "\n");
 			LOG(SOLVER, "- Final state fitness: " << finalState->getFitness() << "\n\n");
 			if (LOG_SOLVER_DETAILS_ENABLED) finalState->print();
 		}

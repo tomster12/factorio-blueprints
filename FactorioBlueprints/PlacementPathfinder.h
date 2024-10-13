@@ -13,44 +13,50 @@ namespace impl
 {
 	struct CATEntry
 	{
-		size_t coordinateHash;
-		// 0b001 -> Above ground
-		// 0b010 -> North/South underground
-		// 0b100 -> East/West underground
-		size_t conflictFlags;
+		std::set<size_t> conflictHashes;
 	};
 
 	inline CATEntry calculateCATEntry(Coordinate coordinate, BeltType type, Direction direction)
 	{
-		// Calculate coordinate hash
-		std::hash<size_t> hasher;
-		size_t coordinateHash = hasher(coordinate.x) ^ (hasher(coordinate.y) << 1);
-
-		// Calculate conflict group
-		size_t conflictFlags = 0;
+		bool isAboveGround = false;
+		bool isUndergroundNS = false;
+		bool isUndergroundEW = false;
 		if (type == BeltType::Inserter || type == BeltType::Conveyor || type == BeltType::UndergroundEntrance || type == BeltType::UndergroundExit)
 		{
-			conflictFlags |= 0b001;
+			isAboveGround = true;
 		}
-
 		if (type == BeltType::Underground || type == BeltType::UndergroundEntrance || type == BeltType::UndergroundExit)
 		{
 			if (direction == Direction::N || direction == Direction::S)
 			{
-				conflictFlags |= 0b010;
+				isUndergroundNS = true;
 			}
-			else conflictFlags |= 0b100;
+			else
+			{
+				isUndergroundEW = true;
+			}
 		}
 
-		// Return final entry
-		return { coordinateHash, conflictFlags };
+		CATEntry entry;
+		std::hash<size_t> intHasher;
+		size_t coordinateHash = intHasher(coordinate.x) ^ (intHasher(coordinate.y) << 1);
+		if (isAboveGround) entry.conflictHashes.insert(coordinateHash ^ (intHasher(1) << 2));
+		if (isUndergroundNS) entry.conflictHashes.insert(coordinateHash ^ (intHasher(2) << 2));
+		if (isUndergroundEW) entry.conflictHashes.insert(coordinateHash ^ (intHasher(3) << 2));
+		return entry;
 	}
 
 	inline bool checkCATEntryConflict(const CATEntry& a, const CATEntry& b)
 	{
-		bool coordMatch = a.coordinateHash == b.coordinateHash;
-		bool setOverlap = (a.conflictFlags & b.conflictFlags) != 0;
-		return coordMatch && setOverlap;
+		// Check if any of the conflict hashes are the same
+		for (size_t hash : a.conflictHashes)
+		{
+			if (b.conflictHashes.find(hash) != b.conflictHashes.end())
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	class CAT
@@ -58,22 +64,21 @@ namespace impl
 	public:
 		CAT();
 		CAT(const CAT& other);
-		void addPath(size_t pathIndex, const CATEntry& entry);
-		void removePath(size_t pathIndex);
+		void addConflict(size_t pathIndex, const CATEntry& entry);
+		void removeConflict(size_t pathIndex);
 		bool checkConflict(const CATEntry& entry) const;
 		std::pair<CATEntry, std::set<size_t>> getConflictingPaths() const;
 
 	private:
-		// Coordinate hash -> { 3 types of conflict flag -> { path index } }
-		std::map<size_t, std::vector<std::set<size_t>>> table;
+		std::map<size_t, std::set<size_t>> conflictTable;
 	};
 
-	struct PFGoal
+	struct PathfindingGoal
 	{
 	public:
-		PFGoal() : isValid(false) {}
+		PathfindingGoal() : isValid(false) {}
 
-		PFGoal(Coordinate coordinate, uint8_t typeFlags, uint8_t directionFlags)
+		PathfindingGoal(Coordinate coordinate, uint8_t typeFlags, uint8_t directionFlags)
 			: coordinate(coordinate), typeFlags(typeFlags), directionFlags(directionFlags), isValid(true)
 		{}
 
@@ -83,19 +88,24 @@ namespace impl
 		bool isValid = false;
 	};
 
-	struct PFData
+	struct PathfindingData
 	{
 		Coordinate coordinate;
 		BeltType type;
 		Direction direction;
 
-		size_t getHash() const
+		inline size_t getHash() const
 		{
 			std::hash<size_t> hasher;
 			return hasher(coordinate.x) ^ (hasher(coordinate.y) << 1) ^ (hasher(static_cast<int>(type)) << 2) ^ (hasher(static_cast<int>(direction)) << 3);
 		}
 
-		void print() const
+		inline CATEntry getCATEntry() const
+		{
+			return calculateCATEntry(coordinate, type, direction);
+		}
+
+		inline void print() const
 		{
 			std::string typeStr = "Unknown";
 			switch (type)
@@ -111,35 +121,36 @@ namespace impl
 			std::cout << "[ (" << coordinate.x << ", " << coordinate.y << ") " << dirString(direction) << " | " << typeStr << " ]" << std::endl;
 		}
 
-		bool isAboveGround() const
+		inline bool isAboveGround() const
 		{
 			return type == BeltType::Conveyor || type == BeltType::UndergroundEntrance || type == BeltType::UndergroundExit;
 		}
 	};
 
-	class PFState : public pf::State<PFState, PFData>
+	class PathfindingState : public pf::State<PathfindingState, PathfindingData>
 	{
 	public:
-		PFState(const std::vector<std::vector<bool>>& blockedGrid, const std::vector<CATEntry>& constraints, PFGoal goal, PFData data);
-		PFState(PFData data, PFState* parent);
+		PathfindingState(const std::vector<std::vector<bool>>& blockedGrid, const std::vector<CATEntry>& constraints, PathfindingGoal goal, PathfindingData data);
+		PathfindingState(PathfindingData data, PathfindingState* parent);
 		bool isGoal() override;
 		float getFCost() override;
 		float getGCost() override;
 		float getHCost() override;
-		std::vector<PFData*> getNeighbours() override;
-		const PFGoal& getGoal() const;
+		std::vector<PathfindingData*> getNeighbours() override;
+		const PathfindingGoal& getGoal() const;
 		bool conflictsWithConstraints() const;
 
 	private:
-		static std::unordered_map<size_t, std::vector<std::pair<PFData, CATEntry>>> neighbourCache;
 		const std::vector<std::vector<bool>>& blockedGrid;
 		const std::vector<CATEntry>& constraints;
-		PFGoal goal;
+		PathfindingGoal goal;
 		bool costCalculated = false;
 		float fCost = 0.0f, gCost = 0.0f, hCost = 0.0f;
-
 		void calculateCosts();
 		void calculateNeighbourCache();
+
+	private:
+		static std::unordered_map<size_t, std::vector<std::pair<PathfindingData, CATEntry>>> neighbourCache;
 	};
 
 	struct ItemEndpoint
@@ -181,7 +192,7 @@ namespace impl
 			bool isValid = true;
 			std::vector<size_t> pathsToCalculate{};
 			std::map<size_t, std::vector<CATEntry>> constraints{};
-			std::map<size_t, std::shared_ptr<pf::Path<PFData>>> solution{};
+			std::map<size_t, std::shared_ptr<pf::Path<PathfindingData>>> solution{};
 			CTConflict firstConflict{};
 			float cost = 0.0f;
 		};
@@ -207,7 +218,7 @@ namespace impl
 		void preprocessPaths();
 		void performPathfinding();
 		void calculateNode(std::shared_ptr<CTNode> node);
-		PFState* initPathNodeWithContext(size_t pathIndex, const std::shared_ptr<CTNode>& node, const CAT& cat);
-		std::tuple<bool, Coordinate, Direction> findPathEdgeWithContext(const std::shared_ptr<pf::Path<PFData>>& path, const Coordinate& target, const std::shared_ptr<CTNode>& node, const CAT& cat, const std::vector<CATEntry>& constraints);
+		PathfindingState* initPathNodeWithContext(size_t pathIndex, const std::shared_ptr<CTNode>& node, const CAT& cat);
+		std::tuple<bool, Coordinate, Direction> findPathEdgeWithContext(const std::shared_ptr<pf::Path<PathfindingData>>& path, const Coordinate& target, const std::shared_ptr<CTNode>& node, const CAT& cat, const std::vector<CATEntry>& constraints);
 	};
 }

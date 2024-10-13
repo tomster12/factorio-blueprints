@@ -9,7 +9,7 @@
 // - Conflicts signify a position and a conflict group
 // - Can add and remove paths, check for conflicts, and get conflicting paths
 
-// PFState
+// PathfindingState
 // - Represents a state in the pathfinding algorithm
 // - Contains a coordinate, type, and direction
 // - Can be converted to a CATEntry for conflict checking
@@ -46,84 +46,62 @@ namespace impl
 
 	CAT::CAT(const CAT& other)
 	{
-		std::cout << "Start copy" << std::endl;
-		for (const auto& coordinateEntry : other.table)
+		for (const auto& entry : other.conflictTable)
 		{
-			table[coordinateEntry.first] = std::vector<std::set<size_t>>();
-			for (const auto& conflictSet : coordinateEntry.second)
-			{
-				std::set<size_t> newConflictSet = conflictSet;
-				table[coordinateEntry.first].push_back(newConflictSet);
-			}
+			conflictTable[entry.first] = entry.second;
 		}
-		std::cout << "End copy" << std::endl;
 	}
 
-	void CAT::addPath(size_t pathIndex, const CATEntry& entry)
+	void CAT::addConflict(size_t pathIndex, const CATEntry& entry)
 	{
-		if (table.find(entry.coordinateHash) == table.end())
+		for (auto& entry : entry.conflictHashes)
 		{
-			table[entry.coordinateHash] = { {}, {}, {} };
-		}
+			if (conflictTable.find(entry) == conflictTable.end())
+			{
+				conflictTable[entry] = { };
+			}
 
-		if (entry.conflictFlags & 0b001) table[entry.coordinateHash][0].insert(pathIndex);
-		if (entry.conflictFlags & 0b010) table[entry.coordinateHash][1].insert(pathIndex);
-		if (entry.conflictFlags & 0b100) table[entry.coordinateHash][2].insert(pathIndex);
+			conflictTable[entry].insert(pathIndex);
+		}
 	}
 
-	void CAT::removePath(size_t pathIndex)
+	void CAT::removeConflict(size_t pathIndex)
 	{
-		for (auto& entry : table)
+		for (auto& conflictSet : conflictTable)
 		{
-			for (auto& conflictSet : entry.second)
-			{
-				conflictSet.erase(pathIndex);
-			}
+			conflictSet.second.erase(pathIndex);
 		}
 	}
 
 	bool CAT::checkConflict(const CATEntry& entry) const
 	{
-		auto found = table.find(entry.coordinateHash);
-		if (found == table.end()) return false;
-
-		const auto& conflictSets = found->second;
-		if (entry.conflictFlags & 0b001 && conflictSets[0].size() > 1) return true;
-		if (entry.conflictFlags & 0b010 && conflictSets[1].size() > 1) return true;
-		if (entry.conflictFlags & 0b100 && conflictSets[2].size() > 1) return true;
+		for (const auto& conflict : entry.conflictHashes)
+		{
+			const auto found = conflictTable.find(conflict);
+			if (found != conflictTable.end() && found->second.size() > 1) return true;
+		}
 		return false;
 	}
 
 	std::pair<CATEntry, std::set<size_t>> CAT::getConflictingPaths() const
 	{
-		for (const auto& entry : table)
+		for (const auto& entry : conflictTable)
 		{
-			const auto& conflictSets = entry.second;
-			if (conflictSets[0].size() > 1)
-			{
-				return { { entry.first, 0b001 }, conflictSets[0] };
-			}
-			if (conflictSets[1].size() > 1)
-			{
-				return { { entry.first, 0b010 }, conflictSets[1] };
-			}
-			if (conflictSets[2].size() > 1)
-			{
-				return { { entry.first, 0b100 }, conflictSets[2] };
-			}
+			const auto& conflictSet = entry.second;
+			if (conflictSet.size() > 1) return { { { entry.first } }, conflictSet };
 		}
-		return { { 0, 0 }, {} };
+		return { { { 0 } }, {} };
 	}
 
-	PFState::PFState(const std::vector<std::vector<bool>>& blockedGrid, const std::vector<CATEntry>& constraints, PFGoal goal, PFData data)
-		: blockedGrid(blockedGrid), constraints(constraints), goal(goal), pf::State<PFState, PFData>(data, nullptr)
+	PathfindingState::PathfindingState(const std::vector<std::vector<bool>>& blockedGrid, const std::vector<CATEntry>& constraints, PathfindingGoal goal, PathfindingData data)
+		: blockedGrid(blockedGrid), constraints(constraints), goal(goal), pf::State<PathfindingState, PathfindingData>(data, nullptr)
 	{}
 
-	PFState::PFState(PFData data, PFState* parent)
-		: pf::State<PFState, PFData>(data, parent), blockedGrid(parent->blockedGrid), constraints(parent->constraints), goal(parent->goal)
+	PathfindingState::PathfindingState(PathfindingData data, PathfindingState* parent)
+		: pf::State<PathfindingState, PathfindingData>(data, parent), blockedGrid(parent->blockedGrid), constraints(parent->constraints), goal(parent->goal)
 	{}
 
-	bool PFState::isGoal()
+	bool PathfindingState::isGoal()
 	{
 		bool match = true;
 		match &= data.coordinate.x == goal.coordinate.x && data.coordinate.y == goal.coordinate.y;
@@ -132,35 +110,35 @@ namespace impl
 		return match;
 	}
 
-	float PFState::getFCost()
+	float PathfindingState::getFCost()
 	{
 		calculateCosts();
 		return fCost;
 	}
 
-	float PFState::getGCost()
+	float PathfindingState::getGCost()
 	{
 		calculateCosts();
 		return gCost;
 	}
 
-	float PFState::getHCost()
+	float PathfindingState::getHCost()
 	{
 		calculateCosts();
 		return hCost;
 	}
 
-	std::vector<PFData*> PFState::getNeighbours()
+	std::vector<PathfindingData*> PathfindingState::getNeighbours()
 	{
 		calculateNeighbourCache();
 
 		// Calculate viable neighbours from cache that arent blocked or conflict
-		std::vector<PFData*> neighbours;
+		std::vector<PathfindingData*> neighbours;
 		neighbours.reserve(neighbourCache[hash].size());
 
 		for (size_t i = 0; i < neighbourCache[hash].size(); i++)
 		{
-			PFData& neighbourData = neighbourCache[hash][i].first;
+			PathfindingData& neighbourData = neighbourCache[hash][i].first;
 			if (blockedGrid[neighbourData.coordinate.x][neighbourData.coordinate.y] && (neighbourData.type != BeltType::None && neighbourData.type != BeltType::Underground)) continue;
 
 			const CATEntry& neighbourEntry = neighbourCache[hash][i].second;
@@ -171,22 +149,22 @@ namespace impl
 		return neighbours;
 	}
 
-	const PFGoal& PFState::getGoal() const
+	const PathfindingGoal& PathfindingState::getGoal() const
 	{
 		return goal;
 	}
 
-	bool PFState::conflictsWithConstraints() const
+	bool PathfindingState::conflictsWithConstraints() const
 	{
 		// Check if any entry in constraints conflicts with this state
 		for (const CATEntry& entry : constraints)
 		{
-			if (checkCATEntryConflict(entry, calculateCATEntry(data.coordinate, data.type, data.direction))) return true;
+			if (checkCATEntryConflict(entry, data.getCATEntry())) return true;
 		}
 		return false;
 	}
 
-	void PFState::calculateCosts()
+	void PathfindingState::calculateCosts()
 	{
 		if (costCalculated) return;
 
@@ -205,11 +183,11 @@ namespace impl
 		costCalculated = true;
 	}
 
-	void PFState::calculateNeighbourCache()
+	void PathfindingState::calculateNeighbourCache()
 	{
 		if (neighbourCache.find(hash) == neighbourCache.end())
 		{
-			neighbourCache[hash] = std::vector<std::pair<PFData, CATEntry>>();
+			neighbourCache[hash] = std::vector<std::pair<PathfindingData, CATEntry>>();
 
 			if (data.type == BeltType::None)
 			{
@@ -285,12 +263,12 @@ namespace impl
 
 			for (auto& neighbour : neighbourCache[hash])
 			{
-				neighbour.second = calculateCATEntry(neighbour.first.coordinate, neighbour.first.type, neighbour.first.direction);
+				neighbour.second = neighbour.first.getCATEntry();
 			}
 		}
 	}
 
-	std::unordered_map<size_t, std::vector<std::pair<PFData, CATEntry>>> PFState::neighbourCache = std::unordered_map<size_t, std::vector<std::pair<PFData, CATEntry>>>();
+	std::unordered_map<size_t, std::vector<std::pair<PathfindingData, CATEntry>>> PathfindingState::neighbourCache = std::unordered_map<size_t, std::vector<std::pair<PathfindingData, CATEntry>>>();
 
 	PlacementPathfinder::PlacementPathfinder(const std::vector<std::vector<bool>>& blockedGrid, const std::vector<ItemEndpoint>& itemEndpoints)
 		: blockedGrid(blockedGrid), itemEndpoints(itemEndpoints)
@@ -683,7 +661,7 @@ namespace impl
 			if (std::find(calculateOrder.begin(), calculateOrder.end(), i) == calculateOrder.end())
 			{
 				node->cost += node->solution[i]->cost;
-				for (const auto& nodeData : node->solution[i]->nodes) cat.addPath(i, calculateCATEntry(nodeData.coordinate, nodeData.type, nodeData.direction));
+				for (const auto& nodeData : node->solution[i]->nodes) cat.addConflict(i, nodeData.getCATEntry());
 			}
 		}
 
@@ -693,11 +671,11 @@ namespace impl
 			auto source = initPathNodeWithContext(pathIndex, node, cat);
 			if (source == nullptr) return;
 
-			node->solution[pathIndex] = pf::asPathfinding<PFState, PFData>(source);
+			node->solution[pathIndex] = pf::asPathfinding<PathfindingState, PathfindingData>(source);
 			Global::evalCountPF++;
 
 			node->cost += node->solution[pathIndex]->cost;
-			for (const auto& nodeData : node->solution[pathIndex]->nodes) cat.addPath(pathIndex, calculateCATEntry(nodeData.coordinate, nodeData.type, nodeData.direction));
+			for (const auto& nodeData : node->solution[pathIndex]->nodes) cat.addConflict(pathIndex, nodeData.getCATEntry());
 		}
 
 		// Find if there are any conflicts for this node and update
@@ -718,7 +696,7 @@ namespace impl
 		node->isValid = true;
 	}
 
-	PFState* PlacementPathfinder::initPathNodeWithContext(size_t pathIndex, const std::shared_ptr<CTNode>& node, const CAT& cat)
+	PathfindingState* PlacementPathfinder::initPathNodeWithContext(size_t pathIndex, const std::shared_ptr<CTNode>& node, const CAT& cat)
 	{
 		// Attempt to resolve the path considering the given CT node
 		// Return nullptr if conflicts and constraints prevent resolution
@@ -738,7 +716,7 @@ namespace impl
 			auto best = findPathEdgeWithContext(sourcePath, destinationEndpoint.coordinate, node, cat, constraints);
 			if (std::get<0>(best) == false) return nullptr;
 
-			PFGoal goal{
+			PathfindingGoal goal{
 				destinationEndpoint.coordinate,
 				static_cast<uint8_t>(BeltType::Conveyor) |
 				static_cast<uint8_t>(BeltType::UndergroundEntrance) |
@@ -746,7 +724,7 @@ namespace impl
 				0
 			};
 
-			return new PFState(blockedGrid, node->constraints[pathIndex], goal, PFData{ std::get<1>(best), BeltType::Inserter, std::get<2>(best) });
+			return new PathfindingState(blockedGrid, node->constraints[pathIndex], goal, PathfindingData{ std::get<1>(best), BeltType::Inserter, std::get<2>(best) });
 		}
 
 		// Endpoint -> Path, resolve closest destination path edge
@@ -762,14 +740,14 @@ namespace impl
 			auto best = findPathEdgeWithContext(destinationPath, sourceEndpoint.coordinate, node, cat, constraints);
 			if (std::get<0>(best) == false) return nullptr;
 
-			PFGoal goal{
+			PathfindingGoal goal{
 				std::get<1>(best),
 				static_cast<uint8_t>(BeltType::Conveyor) |
 				static_cast<uint8_t>(BeltType::UndergroundExit),
 				static_cast<uint8_t>(dirOpposite(std::get<2>(best)))
 			};
 
-			return new PFState(blockedGrid, node->constraints[pathIndex], goal, PFData{ sourceEndpoint.coordinate, BeltType::None, Direction::N });
+			return new PathfindingState(blockedGrid, node->constraints[pathIndex], goal, PathfindingData{ sourceEndpoint.coordinate, BeltType::None, Direction::N });
 		}
 
 		// Endpoint -> Endpoint
@@ -781,17 +759,17 @@ namespace impl
 		if (std::any_of(constraints.begin(), constraints.end(), [&](const CATEntry& entry) { return checkCATEntryConflict(entry, sourceCATEntry) || checkCATEntryConflict(entry, destinationCATEntry); })) return nullptr;
 		if (cat.checkConflict(sourceCATEntry) || cat.checkConflict(destinationCATEntry)) return nullptr;
 
-		PFGoal goal{
+		PathfindingGoal goal{
 			destinationEndpoint.coordinate,
 			static_cast<uint8_t>(BeltType::Conveyor) |
 			static_cast<uint8_t>(BeltType::UndergroundEntrance) |
 			static_cast<uint8_t>(BeltType::UndergroundExit),
 			0
 		};
-		return new PFState(blockedGrid, node->constraints[pathIndex], goal, PFData{ sourceEndpoint.coordinate, BeltType::None, Direction::N });
+		return new PathfindingState(blockedGrid, node->constraints[pathIndex], goal, PathfindingData{ sourceEndpoint.coordinate, BeltType::None, Direction::N });
 	}
 
-	std::tuple<bool, Coordinate, Direction> PlacementPathfinder::findPathEdgeWithContext(const std::shared_ptr<pf::Path<PFData>>& path, const Coordinate& target, const std::shared_ptr<CTNode>& node, const CAT& cat, const std::vector<CATEntry>& constraints)
+	std::tuple<bool, Coordinate, Direction> PlacementPathfinder::findPathEdgeWithContext(const std::shared_ptr<pf::Path<PathfindingData>>& path, const Coordinate& target, const std::shared_ptr<CTNode>& node, const CAT& cat, const std::vector<CATEntry>& constraints)
 	{
 		// Look for the closest edge of the path to the target
 		float bestDistance = std::numeric_limits<float>::max();

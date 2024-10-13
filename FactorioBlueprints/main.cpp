@@ -92,11 +92,11 @@ void checkPathfinding()
 		{ 0, 0, 1, 1, 0, 0, 0 },
 		{ 0, 0, 0, 0, 0, 1, 0 } };
 	std::vector<CATEntry> constraints{};
-	PFGoal goal{ Coordinate{ 2, 6 }, 0, 0 };
+	PathfindingGoal goal{ Coordinate{ 2, 6 }, 0, 0 };
 
 	// Make initial state and perform pathfinding
-	auto initialState = new PFState(blockedGrid, constraints, goal, PFData{ Coordinate{ 0, 0 }, BeltType::None, Direction::E });
-	auto path = pf::asPathfinding<PFState, PFData>(initialState);
+	auto initialState = new PathfindingState(blockedGrid, constraints, goal, PathfindingData{ Coordinate{ 0, 0 }, BeltType::None, Direction::E });
+	auto path = pf::asPathfinding<PathfindingState, PathfindingData>(initialState);
 
 	// Print path
 	for (const auto& nodeData : path->nodes) nodeData.print();
