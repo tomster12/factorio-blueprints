@@ -1,9 +1,12 @@
 #pragma once
 
+#include "PlacementState.h"
 #include "types.h"
 
 namespace impl
 {
+	class PlacementState;
+
 	struct ProblemDefinition
 	{
 		struct ItemInput
@@ -19,25 +22,11 @@ namespace impl
 			Coordinate coordinate;
 		};
 
-		int blueprintWidth = -1;
-		int blueprintHeight = -1;
+		int blueprintWidth = 0;
+		int blueprintHeight = 0;
 		std::map<int, Recipe> recipes;
 		std::map<int, ItemInput> itemInputs;
 		ItemOutput itemOutput;
-	};
-
-	class ProblemDefinitionFactory
-	{
-	public:
-		static std::unique_ptr<ProblemDefinitionFactory> create();
-		ProblemDefinitionFactory* setRecipes(std::map<int, Recipe> recipes);
-		ProblemDefinitionFactory* setSize(int blueprintWidth, int blueprintHeight);
-		ProblemDefinitionFactory* addInputItem(int inputItem, float inputRate, int x, int y);
-		ProblemDefinitionFactory* addOutputItem(int itemOutput, int x, int y);
-		ProblemDefinition finalise();
-
-	private:
-		ProblemDefinition problemDefinition;
 	};
 
 	struct RunConfig
@@ -65,6 +54,9 @@ namespace impl
 	public:
 		static ProblemSolver solve(const ProblemDefinition& problem);
 
+	public:
+		~ProblemSolver();
+
 	private:
 		struct ItemInfo
 		{
@@ -78,6 +70,7 @@ namespace impl
 		int bestRunConfig = -1;
 		std::map<int, ItemInfo> baseItemInfos;
 		std::map<int, RunConfig> possibleRunConfigs;
+		std::map<int, PlacementState*> solvedStates;
 
 		ProblemSolver(const ProblemDefinition& problem);
 		void solve();

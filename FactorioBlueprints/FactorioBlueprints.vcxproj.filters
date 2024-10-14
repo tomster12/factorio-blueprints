@@ -28,6 +28,9 @@
     <ClCompile Include="main.cpp">
       <Filter>main</Filter>
     </ClCompile>
+    <ClCompile Include="SolverGUI.cpp">
+      <Filter>main</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="pf.h">
@@ -56,6 +59,12 @@
     </ClInclude>
     <ClInclude Include="macros.h">
       <Filter>main</Filter>
+    </ClInclude>
+    <ClInclude Include="SolverGUI.h">
+      <Filter>main</Filter>
+    </ClInclude>
+    <ClInclude Include="ListenableEvent.h">
+      <Filter>impl</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

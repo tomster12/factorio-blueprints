@@ -22,41 +22,6 @@
 
 namespace impl
 {
-	std::unique_ptr<ProblemDefinitionFactory> ProblemDefinitionFactory::create()
-	{
-		return std::make_unique<ProblemDefinitionFactory>();
-	}
-
-	ProblemDefinitionFactory* ProblemDefinitionFactory::setRecipes(std::map<int, Recipe> recipes)
-	{
-		problemDefinition.recipes = recipes;
-		return this;
-	}
-
-	ProblemDefinitionFactory* ProblemDefinitionFactory::setSize(int blueprintWidth, int blueprintHeight)
-	{
-		problemDefinition.blueprintWidth = blueprintWidth;
-		problemDefinition.blueprintHeight = blueprintHeight;
-		return this;
-	}
-
-	ProblemDefinitionFactory* ProblemDefinitionFactory::addInputItem(int inputItem, float inputRate, int x, int y)
-	{
-		problemDefinition.itemInputs[inputItem] = { inputItem, inputRate, { x, y } };
-		return this;
-	}
-
-	ProblemDefinitionFactory* ProblemDefinitionFactory::addOutputItem(int itemOutput, int x, int y)
-	{
-		problemDefinition.itemOutput = { itemOutput, { x, y } };
-		return this;
-	}
-
-	ProblemDefinition ProblemDefinitionFactory::finalise()
-	{
-		return std::move(problemDefinition);
-	}
-
 	ProblemSolver ProblemSolver::solve(const ProblemDefinition& problem)
 	{
 		// Produce a solver object with parameters then solve
@@ -68,6 +33,11 @@ namespace impl
 	ProblemSolver::ProblemSolver(const ProblemDefinition& problem)
 		: problem(problem)
 	{}
+
+	ProblemSolver::~ProblemSolver()
+	{
+		for (const auto& entry : solvedStates) delete entry.second;
+	}
 
 	void ProblemSolver::solve()
 	{
@@ -312,8 +282,10 @@ namespace impl
 		LOG(SOLVER, "Stage: performSearch()\n"
 			<< "=======================\n\n");
 
+		for (const auto& entry : solvedStates) delete entry.second;
+		solvedStates.clear();
+
 		for (int i = bestRunConfig; i > 0; i--)
-			//for (int i = 1; i <= bestRunConfig; i++)
 		{
 			LOG(SOLVER, "--- Evaluating run config " << i << " ---\n\n");
 
@@ -323,14 +295,15 @@ namespace impl
 			Global::evalCountCBP = 0;
 			Global::evalCountPF = 0;
 
-			std::shared_ptr<PlacementState> initialState = PlacementState::createRandom(problem, runConfig);
+			PlacementConfig config(problem, runConfig);
+			PlacementState* initialState = PlacementState::createRandom(config);
 
 			auto start = std::chrono::high_resolution_clock::now();
 
 			#if USE_ANNEALING
-			std::shared_ptr<PlacementState> finalState = ls::simulatedAnnealing(initialState, ANNEALING_TEMP, ANNEALING_COOLING, ANNEALING_ITERATIONS);
+			solvedStates[i] = ls::simulatedAnnealing(initialState, ANNEALING_TEMP, ANNEALING_COOLING, ANNEALING_ITERATIONS);
 			#else
-			std::shared_ptr<PlacementState> finalState = ls::hillClimbing(initialState, HILLCLIMBING_ITERATIONS);
+			solvedStates[i] = ls::hillClimbing(initialState, HILLCLIMBING_ITERATIONS);
 			#endif
 
 			auto end = std::chrono::high_resolution_clock::now();
@@ -341,8 +314,8 @@ namespace impl
 			LOG(SOLVER, "- PlacementState Evaluation count: " << Global::evalCountLS << "\n");
 			LOG(SOLVER, "- PlacementPathfinder Evaluation count: " << Global::evalCountCBP << "\n");
 			LOG(SOLVER, "- PathfindingState Evaluation count: " << Global::evalCountPF << "\n");
-			LOG(SOLVER, "- Final state fitness: " << finalState->getFitness() << "\n\n");
-			if (LOG_SOLVER_DETAILS_ENABLED) finalState->print();
+			LOG(SOLVER, "- Final state fitness: " << solvedStates[i]->getFitness() << "\n\n");
+			if (LOG_SOLVER_DETAILS_ENABLED) solvedStates[i]->print();
 		}
 	}
 }

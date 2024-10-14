@@ -10,12 +10,12 @@
 
 namespace impl
 {
-	std::shared_ptr<PlacementState> PlacementState::createRandom(const ProblemDefinition& problem, const RunConfig& runConfig)
+	PlacementState* PlacementState::createRandom(const PlacementConfig& config)
 	{
-		std::vector<AssemblerInstance> assemblers;
+		std::vector<AssemblerInstance> assemblerPlacements;
 
 		// For each item type
-		for (const auto& itemConfigPair : runConfig.itemConfigs)
+		for (const auto& itemConfigPair : config.runConfig.itemConfigs)
 		{
 			const auto& itemConfig = itemConfigPair.second;
 			if (itemConfig.assemblerCount == 0) continue;
@@ -24,8 +24,8 @@ namespace impl
 			for (int i = 0; i < itemConfig.assemblerCount; i++)
 			{
 				Coordinate coord;
-				coord.x = rand() % (problem.blueprintWidth - 2);
-				coord.y = rand() % (problem.blueprintHeight - 2);
+				coord.x = rand() % (config.problem.blueprintWidth - 2);
+				coord.y = rand() % (config.problem.blueprintHeight - 2);
 				AssemblerInstance assembler{ itemConfig.item, coord };
 
 				// Available inserters for this assembler
@@ -53,22 +53,27 @@ namespace impl
 					assembler.inserters[inserterIndex] = InserterInstance{ itemConfig.item, itemConfig.outputInserterRequirement.rate, false };
 				}
 
-				assemblers.push_back(assembler);
+				assemblerPlacements.push_back(assembler);
 			}
 		}
 
-		return std::make_shared<PlacementState>(problem, runConfig, assemblers);
+		return new PlacementState(config, assemblerPlacements);
 	}
 
-	PlacementState::PlacementState(const ProblemDefinition& problem, const RunConfig& runConfig, const std::vector<AssemblerInstance>& assemblers)
-		: problem(problem), runConfig(runConfig), assemblers(assemblers)
+	PlacementState::PlacementState(const PlacementConfig& config, const std::vector<AssemblerInstance>& assemblerPlacements)
+		: config(config), assemblerPlacements(assemblerPlacements), ls::State<PlacementState>()
 	{
 		calculateHash();
 	}
 
+	PlacementState::~PlacementState()
+	{
+		delete pathfinder;
+	}
+
 	float PlacementState::getFitness()
 	{
-		if (costCalculated) return fitness;
+		if (isFitnessCalculated) return fitness;
 
 		fitness = 0.0f;
 
@@ -78,25 +83,25 @@ namespace impl
 		#if USE_PATHFINDING
 		if (isWorldValid)
 		{
-			pathfinder = std::make_shared<PlacementPathfinder>(blockedGrid, itemEndpoints);
+			pathfinder = new PlacementPathfinder(blockedGrid, itemEndpoints);
 			fitness += pathfinder->getFitness();
 		}
 		#endif
 
 		Global::evalCountLS++;
-		costCalculated = true;
+		isFitnessCalculated = true;
 		return fitness;
 	}
 
-	std::vector<std::shared_ptr<PlacementState>> PlacementState::getNeighbours()
+	std::vector<PlacementState*> PlacementState::getNeighbours(ls::StateCache<PlacementState>& cache)
 	{
-		if (neighboursCalculated) return neighbours;
+		if (areNeighboursCalculated) return neighbours;
 
-		neighbours = std::vector<std::shared_ptr<PlacementState>>();
+		neighbours = std::vector<PlacementState*>();
 
-		for (int i = 0; i < assemblers.size(); i++)
+		for (int i = 0; i < assemblerPlacements.size(); i++)
 		{
-			const AssemblerInstance& assembler = assemblers[i];
+			const AssemblerInstance& assembler = assemblerPlacements[i];
 
 			// Neighbour for moving each assembler in each direction
 			for (int j = 0; j < 4; j++)
@@ -104,11 +109,13 @@ namespace impl
 				Direction dir = static_cast<Direction>(1 << j);
 				Coordinate offset = dirOffset(dir);
 				Coordinate newCoord = { assembler.coordinate.x + offset.x, assembler.coordinate.y + offset.y };
-				if (newCoord.x < 0 || newCoord.x >= problem.blueprintWidth - 3 || newCoord.y < 0 || newCoord.y >= problem.blueprintHeight - 3) continue;
-				std::vector<AssemblerInstance> newAssemblers = assemblers;
-				newAssemblers[i].coordinate = newCoord;
+				if (newCoord.x < 0 || newCoord.x >= config.problem.blueprintWidth - 3 || newCoord.y < 0 || newCoord.y >= config.problem.blueprintHeight - 3) continue;
 
-				neighbours.push_back(std::make_shared<PlacementState>(problem, runConfig, newAssemblers));
+				std::vector<AssemblerInstance> newAssemblerPlacements = assemblerPlacements;
+				newAssemblerPlacements[i].coordinate = newCoord;
+
+				PlacementState* neighbour = new PlacementState(config, newAssemblerPlacements);
+				neighbours.push_back(cache.getCached(neighbour));
 			}
 
 			// Neighbour for moving an inserter from 1 slot to another on the same assembler
@@ -123,17 +130,24 @@ namespace impl
 
 					const InserterInstance& otherInserter = assembler.inserters[k];
 					if (otherInserter.item != -1) continue;
-					std::vector<AssemblerInstance> newAssemblers = assemblers;
-					newAssemblers[i].inserters[j] = InserterInstance{ -1, false };
-					newAssemblers[i].inserters[k] = inserter;
 
-					neighbours.push_back(std::make_shared<PlacementState>(problem, runConfig, newAssemblers));
+					std::vector<AssemblerInstance> newAssemblerPlacements = assemblerPlacements;
+					newAssemblerPlacements[i].inserters[j] = InserterInstance{ -1, false };
+					newAssemblerPlacements[i].inserters[k] = inserter;
+
+					PlacementState* neighbour = new PlacementState(config, newAssemblerPlacements);
+					neighbours.push_back(cache.getCached(neighbour));
 				}
 			}
 		}
 
-		neighboursCalculated = true;
+		areNeighboursCalculated = true;
 		return neighbours;
+	}
+
+	void PlacementState::clearNeighbours()
+	{
+		neighbours.clear();
 	}
 
 	bool PlacementState::getValid()
@@ -150,9 +164,9 @@ namespace impl
 
 		HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 
-		for (int y = 0; y < problem.blueprintHeight; y++)
+		for (int y = 0; y < config.problem.blueprintHeight; y++)
 		{
-			for (int x = 0; x < problem.blueprintWidth; x++)
+			for (int x = 0; x < config.problem.blueprintWidth; x++)
 			{
 				if (blockedGrid[x][y])
 				{
@@ -179,7 +193,7 @@ namespace impl
 
 		std::cout << "--- Placement State Data Log ---" << std::endl << std::endl;
 
-		for (const auto& assembler : assemblers)
+		for (const auto& assembler : assemblerPlacements)
 		{
 			std::cout << "Assembler: item " << assembler.item
 				<< " at (" << assembler.coordinate.x << ", " << assembler.coordinate.y << ")" << std::endl;
@@ -208,22 +222,22 @@ namespace impl
 
 	void PlacementState::calculateWorld()
 	{
-		if (worldCalculated) return;
+		if (isWorldCalculated) return;
 
 		itemEndpoints = std::vector<ItemEndpoint>();
-		blockedGrid = std::vector<std::vector<bool>>(problem.blueprintWidth, std::vector<bool>(problem.blueprintHeight, false));
-		itemGrid = std::vector<std::vector<int>>(problem.blueprintWidth, std::vector<int>(problem.blueprintHeight, -1));
+		blockedGrid = std::vector<std::vector<bool>>(config.problem.blueprintWidth, std::vector<bool>(config.problem.blueprintHeight, false));
+		itemGrid = std::vector<std::vector<int>>(config.problem.blueprintWidth, std::vector<int>(config.problem.blueprintHeight, -1));
 
 		// Add input and output items to world
-		for (const auto& input : problem.itemInputs)
+		for (const auto& input : config.problem.itemInputs)
 		{
 			itemGrid[input.second.coordinate.x][input.second.coordinate.y] = input.first;
 			itemEndpoints.push_back({ input.first, input.second.rate, true, input.second.coordinate });
 		}
-		itemGrid[problem.itemOutput.coordinate.x][problem.itemOutput.coordinate.y] = problem.itemOutput.item;
-		itemEndpoints.push_back({ problem.itemOutput.item, 0.0f, false, problem.itemOutput.coordinate });
+		itemGrid[config.problem.itemOutput.coordinate.x][config.problem.itemOutput.coordinate.y] = config.problem.itemOutput.item;
+		itemEndpoints.push_back({ config.problem.itemOutput.item, 0.0f, false, config.problem.itemOutput.coordinate });
 
-		for (const auto& assembler : assemblers)
+		for (const auto& assembler : assemblerPlacements)
 		{
 			// Check each 3x3 area in each assembler for blocked
 			for (int x = 0; x < 3; x++)
@@ -248,7 +262,7 @@ namespace impl
 				Coordinate offset = INSERTER_OFFSETS[i];
 				Coordinate coord = { assembler.coordinate.x + offset.x, assembler.coordinate.y + offset.y };
 
-				if (coord.x < 0 || coord.x >= problem.blueprintWidth || coord.y < 0 || coord.y >= problem.blueprintHeight)
+				if (coord.x < 0 || coord.x >= config.problem.blueprintWidth || coord.y < 0 || coord.y >= config.problem.blueprintHeight)
 				{
 					worldCost += 1.0f;
 					continue;
@@ -264,7 +278,7 @@ namespace impl
 				Coordinate checkOffset = dirOffset(checkDir);
 				Coordinate checkCoord = { coord.x + checkOffset.x, coord.y + checkOffset.y };
 
-				if (checkCoord.x < 0 || checkCoord.x >= problem.blueprintWidth || checkCoord.y < 0 || checkCoord.y >= problem.blueprintHeight)
+				if (checkCoord.x < 0 || checkCoord.x >= config.problem.blueprintWidth || checkCoord.y < 0 || checkCoord.y >= config.problem.blueprintHeight)
 				{
 					worldCost += 1.0f;
 					continue;
@@ -279,13 +293,15 @@ namespace impl
 		}
 
 		isWorldValid = worldCost == 0.0f;
-		worldCalculated = true;
+		isWorldCalculated = true;
 	}
 
 	void PlacementState::calculateHash()
 	{
+		if (hash != 0) return;
+
 		std::string hashString = "";
-		for (const auto& assembler : assemblers)
+		for (const auto& assembler : assemblerPlacements)
 		{
 			hashString += "(" + std::to_string(assembler.item) + "," + std::to_string(assembler.coordinate.x) + "," + std::to_string(assembler.coordinate.y) + ")";
 			for (int i = 0; i < 12; i++)

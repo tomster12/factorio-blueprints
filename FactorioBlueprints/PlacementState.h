@@ -7,6 +7,20 @@
 
 namespace impl
 {
+	struct ProblemDefinition;
+	struct RunConfig;
+
+	class PlacementConfig
+	{
+	public:
+		const ProblemDefinition& problem;
+		const RunConfig& runConfig;
+
+		PlacementConfig(const ProblemDefinition& problem, const RunConfig& runConfig)
+			: problem(problem), runConfig(runConfig)
+		{}
+	};
+
 	class PlacementState : public ls::State<PlacementState>
 	{
 	public:
@@ -28,30 +42,34 @@ namespace impl
 		};
 
 	public:
-		static std::shared_ptr<PlacementState> createRandom(const ProblemDefinition& problem, const RunConfig& runConfig);
-		PlacementState(const ProblemDefinition& problem, const RunConfig& runConfig, const std::vector<AssemblerInstance>& assemblers);
+		static PlacementState* createRandom(const PlacementConfig& config);
+
+	public:
+		PlacementState(const PlacementConfig& config, const std::vector<AssemblerInstance>& assemblerPlacements);
+		~PlacementState();
 		float getFitness() override;
-		std::vector<std::shared_ptr<PlacementState>> getNeighbours() override;
+		std::vector<PlacementState*> getNeighbours(ls::StateCache<PlacementState>& cache) override;
+		void clearNeighbours() override;
 		bool getValid();
 		void print();
 
 	private:
-		const ProblemDefinition& problem;
-		const RunConfig& runConfig;
-		std::vector<AssemblerInstance> assemblers;
-		bool costCalculated = false;
-		bool neighboursCalculated = false;
-		bool worldCalculated = false;
+		const PlacementConfig& config;
+		const std::vector<AssemblerInstance> assemblerPlacements;
+
+		bool isFitnessCalculated = false;
+		float fitness = 0.0f;
+		PlacementPathfinder* pathfinder;
+		bool isWorldCalculated = false;
 		bool isWorldValid = false;
-		std::vector<std::shared_ptr<PlacementState>> neighbours;
+		float worldCost = 0.0f;
 		std::vector<std::vector<bool>> blockedGrid;
 		std::vector<std::vector<int>> itemGrid;
 		std::vector<ItemEndpoint> itemEndpoints;
-		float worldCost = 0.0f;
-		std::shared_ptr<PlacementPathfinder> pathfinder;
-		float fitness = 0.0f;
+		bool areNeighboursCalculated = false;
+		std::vector<PlacementState*> neighbours;
 
-		void calculateWorld();
 		void calculateHash();
+		void calculateWorld();
 	};
 }

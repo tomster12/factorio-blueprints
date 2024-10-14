@@ -1,21 +1,24 @@
 #pragma once
 
-#include <vector>
 #include <map>
-#include <iostream>
+#include <vector>
 #include "macros.h"
 #include "log.h"
 
 namespace ls
 {
 	template<typename T>
+	class StateCache;
+
+	template<typename T>
 	class State
 	{
 	public:
 		virtual float getFitness() = 0;
-		virtual std::vector<std::shared_ptr<T>> getNeighbours() = 0;
-		size_t getHash() const { return hash; }
-		bool operator==(State<T>& other) const { return hash == other.hash; }
+		virtual std::vector<T*> getNeighbours(StateCache<T>& cache) = 0;
+		virtual void clearNeighbours() = 0;
+		bool operator==(State<T>& other) { return hash == other.hash; }
+		size_t getHash() { return hash; }
 
 	protected:
 		size_t hash = 0;
@@ -25,47 +28,62 @@ namespace ls
 	class StateCache
 	{
 	public:
-		inline StateCache() { cache = std::map<size_t, std::shared_ptr<T>>(); }
-		inline std::shared_ptr<T> getCached(std::shared_ptr<T> state)
+		StateCache()
+		{
+			cache = std::map<size_t, T*>();
+		}
+
+		~StateCache()
+		{
+			for (auto& pair : cache) delete pair.second;
+		}
+
+		T* getCached(T* state)
 		{
 			size_t hash = state->getHash();
 			if (cache.find(hash) == cache.end()) cache[hash] = state;
+			else if (state != cache[hash]) delete state;
 			return cache[hash];
 		}
-		inline size_t getCacheSize() { return cache.size(); }
+
+		void removeCached(T* state)
+		{
+			size_t hash = state->getHash();
+			if (cache.find(hash) != cache.end()) cache.erase(hash);
+		}
+
+		size_t getCacheSize()
+		{
+			return cache.size();
+		}
 
 	private:
-		std::map<size_t, std::shared_ptr<T>> cache;
+		std::map<size_t, T*> cache;
 	};
 
 	template<typename T>
-	std::shared_ptr<T> hillClimbing(std::shared_ptr<T> start, int maxIterations)
+	T* hillClimbing(T* start, int maxIterations)
 	{
-		static_assert(std::is_base_of<State<T>, T>::value, "T must be a subclass of State<T>.");
-
 		// Initialize with start
 		StateCache<T> cache;
-		std::shared_ptr<T> current = cache.getCached(start);
+		T* current = cache.getCached(start);
 		LOG(LOCAL_SEARCH, "Start, fitness: " << current->getFitness() << "\n");
 
 		// Loop until max iterations or local maximum
-		std::shared_ptr<T> best = start;
 		size_t it = 0;
 		for (; it < maxIterations; it++)
 		{
 			// Find best neighbour
-			std::shared_ptr<T> best = current;
-			for (std::shared_ptr<T>& neighbour : current->getNeighbours())
+			std::vector<T*> neighbours = current->getNeighbours(cache);
+
+			T* best = current;
+			for (T* neighbour : neighbours)
 			{
-				std::shared_ptr<T> cached = cache.getCached(neighbour);
-				if (cached->getFitness() > best->getFitness())
-				{
-					best = cached;
-				}
+				if (neighbour->getFitness() > best->getFitness()) best = neighbour;
 			}
 
 			// Found local maximum
-			if (best == current)
+			if (current == best)
 			{
 				LOG(LOCAL_SEARCH, "It " << it << ", local maximum\n");
 				break;
@@ -74,36 +92,37 @@ namespace ls
 			// Move to best neighbour
 			current = best;
 			LOG(LOCAL_SEARCH, "It " << it << ", better fitness: " << best->getFitness() << "\n");
-
-			// Update current best
-			if (current->getFitness() > best->getFitness()) best = current;
 		}
 
-		LOG(LOCAL_SEARCH, "Finished " << it << " iterations, fitness: " << best->getFitness() << ", states evaluated: " << cache.getCacheSize() << "\n\n");
-		return best;
+		// Detach current from cache, then delete all cached states
+		current->clearNeighbours();
+		cache.removeCached(current);
+
+		// Return best state
+		LOG(LOCAL_SEARCH, "Finished " << it << " iterations, fitness: " << current->getFitness() << ", states evaluated: " << cache.getCacheSize() << "\n\n");
+		return current;
 	}
 
 	template<typename T>
-	std::shared_ptr<T> simulatedAnnealing(std::shared_ptr<T> start, float temperature, float coolingRate, int maxIterations)
+	T* simulatedAnnealing(T* start, float temperature, float coolingRate, int maxIterations)
 	{
-		static_assert(std::is_base_of<State<T>, T>::value, "T must be a subclass of State<T>.");
-
 		// Initialize with start
 		StateCache<T> cache;
-		std::shared_ptr<T> current = cache.getCached(start);
+		T* current = cache.getCached(start);
 		LOG(LOCAL_SEARCH, "Start, fitness: " << current->getFitness() << "\n");
 
 		// Loop until max iterations or local maximum
 		size_t it = 0;
-		std::shared_ptr<T> best = start;
+		T* best = start;
 		for (; it < maxIterations && temperature > 0.01f; it++)
 		{
 			// Find random neighbour
-			std::shared_ptr<T> next = current->getNeighbours()[rand() % current->getNeighbours().size()];
+			std::vector<T*> neighbours = current->getNeighbours(cache);
+			T* next = neighbours[rand() % neighbours.size()];
 			next = cache.getCached(next);
-			float delta = next->getFitness() - current->getFitness();
 
 			// If better, move to neighbour
+			float delta = next->getFitness() - current->getFitness();
 			if (delta >= 0)
 			{
 				current = next;
@@ -128,6 +147,11 @@ namespace ls
 			if (current->getFitness() > best->getFitness()) best = current;
 		}
 
+		// Detach current from cache, then delete all cached states
+		best->clearNeighbours();
+		cache.removeCached(best);
+
+		// Return best state
 		LOG(LOCAL_SEARCH, "Finished " << it << " iterations, fitness: " << best->getFitness() << ", states seen: " << cache.getCacheSize() << "\n\n");
 		return best;
 	}

@@ -160,7 +160,7 @@ namespace impl
 
 	void PathfindingState::calculateCosts()
 	{
-		if (costCalculated) return;
+		if (isFitnessCalculated) return;
 
 		if (parent == nullptr) gCost = 0.0f;
 		else
@@ -174,7 +174,7 @@ namespace impl
 
 		fCost = gCost + hCost;
 
-		costCalculated = true;
+		isFitnessCalculated = true;
 	}
 
 	void PathfindingState::calculateNeighbourCache()
@@ -270,12 +270,12 @@ namespace impl
 
 	float PlacementPathfinder::getFitness()
 	{
-		if (fitnessCalculated) return fitness;
+		if (isFitnessCalculated) return fitness;
 		Global::evalCountCBP++;
 
 		solve();
 
-		fitnessCalculated = true;
+		isFitnessCalculated = true;
 		return fitness;
 	}
 
@@ -566,13 +566,11 @@ namespace impl
 			{
 				// Initialize next node and calculate
 				auto next = std::make_shared<CTNode>();
-				next->isValid = true;
 				next->constraints = current->constraints;
+				next->constraints[pathIndex].push_back(current->firstConflict.catEntry);
 				next->solution = current->solution;
-				next->cost = current->cost;
 				next->cat = current->cat;
 				next->pathsToCalculate = { pathIndex };
-				next->constraints[pathIndex].push_back(current->firstConflict.catEntry);
 				processCTNode(next);
 				if (next->isValid) openSet.push(next);
 			}
@@ -652,7 +650,7 @@ namespace impl
 			Global::evalCountPF++;
 		}
 
-		// Copy solutions into CAT
+		// Copy new solutions into CAT
 		for (size_t pathIndex : calculateOrder)
 		{
 			node->cost += node->solution[pathIndex]->cost;

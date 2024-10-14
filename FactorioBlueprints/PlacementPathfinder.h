@@ -144,7 +144,7 @@ namespace impl
 		const std::vector<std::vector<bool>>& blockedGrid;
 		const std::vector<CATEntry>& constraints;
 		PathfindingGoal goal;
-		bool costCalculated = false;
+		bool isFitnessCalculated = false;
 		float fCost = 0.0f, gCost = 0.0f, hCost = 0.0f;
 		void calculateCosts();
 		void calculateNeighbourCache();
@@ -219,7 +219,7 @@ namespace impl
 		std::vector<PathConfig> pathConfigs;
 		std::shared_ptr<CTNode> solutionNode;
 		bool solutionNodeFound = false;
-		bool fitnessCalculated = false;
+		bool isFitnessCalculated = false;
 		float fitness = 0.0f;
 
 		void solve();
