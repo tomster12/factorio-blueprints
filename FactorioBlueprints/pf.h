@@ -61,7 +61,7 @@ namespace pf
 	};
 
 	template<typename T, typename D>
-	std::shared_ptr<Path<D>> asPathfinding(T* start)
+	Path<D> asPathfinding(T* start)
 	{
 		std::priority_queue<T*, std::vector<T*>, CompareNodeByFCost> openSet;
 		std::unordered_set<size_t> closedSetHash;
@@ -83,20 +83,20 @@ namespace pf
 			// Found goal so extract path and cleanup nodes
 			if (current->isGoal())
 			{
-				std::shared_ptr<Path<D>> path = std::make_shared<Path<D>>();
+				Path<D> path = Path<D>();
 
 				T* node = current;
 				while (node != nullptr)
 				{
-					path->nodes.push_back(node->moveData());
-					path->cost += node->getGCost();
+					path.nodes.push_back(node->moveData());
+					path.cost += node->getGCost();
 					node = node->getParent();
 				}
 				for (T* node : allNodes) delete node;
 
-				LOG(PATHFINDING, "Path found, cost: " << path->cost << "\n");
-				std::reverse(path->nodes.begin(), path->nodes.end());
-				path->found = true;
+				LOG(PATHFINDING, "Path found, cost: " << path.cost << "\n");
+				std::reverse(path.nodes.begin(), path.nodes.end());
+				path.found = true;
 				return path;
 			}
 
@@ -123,8 +123,8 @@ namespace pf
 
 		// Cleanup and return without path
 		for (T* node : allNodes) delete node;
-		std::shared_ptr<Path<D>> path = std::make_shared<Path<D>>();
-		path->found = false;
+		Path<D> path = Path<D>();
+		path.found = false;
 		return path;
 	}
 }

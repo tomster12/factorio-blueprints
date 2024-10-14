@@ -296,18 +296,18 @@ namespace impl
 			Global::evalCountPF = 0;
 
 			PlacementConfig config(problem, runConfig);
-			PlacementState* initialState = PlacementState::createRandom(config);
+			PlacementState* root = PlacementState::createRandom(config);
 
-			auto start = std::chrono::high_resolution_clock::now();
+			auto startTime = std::chrono::high_resolution_clock::now();
 
 			#if USE_ANNEALING
-			solvedStates[i] = ls::simulatedAnnealing(initialState, ANNEALING_TEMP, ANNEALING_COOLING, ANNEALING_ITERATIONS);
+			solvedStates[i] = ls::simulatedAnnealing(root, ANNEALING_TEMP, ANNEALING_COOLING, ANNEALING_ITERATIONS);
 			#else
-			solvedStates[i] = ls::hillClimbing(initialState, HILLCLIMBING_ITERATIONS);
+			solvedStates[i] = ls::hillClimbing(root, HILLCLIMBING_ITERATIONS);
 			#endif
 
-			auto end = std::chrono::high_resolution_clock::now();
-			auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+			auto endTime = std::chrono::high_resolution_clock::now();
+			auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
 
 			LOG(SOLVER, "Finished evaluation\n");
 			LOG(SOLVER, "- Time taken: " << duration.count() << "ms\n");

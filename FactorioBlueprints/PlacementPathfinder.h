@@ -75,17 +75,16 @@ namespace impl
 
 	struct PathfindingGoal
 	{
-	public:
+		Coordinate coordinate;
+		uint8_t typeFlags = 0;
+		uint8_t directionFlags = 0;
+		bool isValid = false;
+
 		PathfindingGoal() : isValid(false) {}
 
 		PathfindingGoal(Coordinate coordinate, uint8_t typeFlags, uint8_t directionFlags)
 			: coordinate(coordinate), typeFlags(typeFlags), directionFlags(directionFlags), isValid(true)
 		{}
-
-		Coordinate coordinate;
-		uint8_t typeFlags = 0;
-		uint8_t directionFlags = 0;
-		bool isValid = false;
 	};
 
 	struct PathfindingData
@@ -190,11 +189,11 @@ namespace impl
 		struct CTNode
 		{
 			bool isValid = true;
-			std::vector<size_t> pathsToCalculate{};
-			std::map<size_t, std::vector<CATEntry>> constraints{};
-			std::map<size_t, std::shared_ptr<pf::Path<PathfindingData>>> solution{};
+			std::vector<size_t> pathsToCalculate;
+			std::map<size_t, std::vector<CATEntry>> constraints;
+			std::map<size_t, pf::Path<PathfindingData>> solution;
 			CAT cat;
-			CTConflict firstConflict{};
+			CTConflict firstConflict;
 			float cost = 0.0f;
 		};
 
@@ -206,7 +205,7 @@ namespace impl
 	private:
 		struct CompareCTNodeByCost
 		{
-			bool operator()(const std::shared_ptr<CTNode>& a, const std::shared_ptr<CTNode>& b) const
+			bool operator()(const CTNode* a, const CTNode* b) const
 			{
 				return a->cost > b->cost;
 			}
@@ -217,7 +216,7 @@ namespace impl
 		size_t currentPathGroup = 0;
 		std::map<size_t, float> pathGroupSpareRates;
 		std::vector<PathConfig> pathConfigs;
-		std::shared_ptr<CTNode> solutionNode;
+		CTNode* solutionNode;
 		bool solutionNodeFound = false;
 		bool isFitnessCalculated = false;
 		float fitness = 0.0f;
@@ -225,8 +224,8 @@ namespace impl
 		void solve();
 		void preprocessPaths();
 		void performPathfinding();
-		void processCTNode(std::shared_ptr<CTNode> node);
-		PathfindingState* initPathNodeWithContext(size_t pathIndex, const std::shared_ptr<CTNode>& node);
-		std::tuple<bool, Coordinate, Direction> findPathEdgeWithContext(const std::shared_ptr<pf::Path<PathfindingData>>& path, const Coordinate& target, const std::shared_ptr<CTNode>& node, const std::vector<CATEntry>& constraints);
+		void processCTNode(CTNode* node);
+		PathfindingState* initPathNodeWithContext(size_t pathIndex, CTNode* node);
+		std::tuple<bool, Coordinate, Direction> findPathEdgeWithContext(const pf::Path<PathfindingData>& path, const Coordinate& target, CTNode* node, const std::vector<CATEntry>& constraints);
 	};
 }

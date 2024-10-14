@@ -285,7 +285,7 @@ namespace impl
 		size_t pathsFound = 0;
 		for (const auto& path : solutionNode->solution)
 		{
-			if (path.second->found) pathsFound++;
+			if (path.second.found) pathsFound++;
 		}
 		return pathsFound;
 	}
@@ -330,10 +330,10 @@ namespace impl
 			printEndpoint(pathConfigs[i].source);
 			std::cout << " to ";
 			printEndpoint(pathConfigs[i].destination);
-			std::cout << ", cost: " << path->cost;
-			std::cout << ", nodes: " << path->nodes.size() << std::endl;
+			std::cout << ", cost: " << path.cost;
+			std::cout << ", nodes: " << path.nodes.size() << std::endl;
 
-			for (const auto& nodeData : path->nodes)
+			for (const auto& nodeData : path.nodes)
 			{
 				std::cout << "- ";
 				nodeData.print();
@@ -529,10 +529,10 @@ namespace impl
 		// This would happen in a solution with no conflicts but some paths invalid
 
 		// Initialize open set
-		std::priority_queue<std::shared_ptr<CTNode>, std::vector<std::shared_ptr<CTNode>>, CompareCTNodeByCost> openSet;
+		std::priority_queue<CTNode*, std::vector<CTNode*>, CompareCTNodeByCost> openSet;
 
 		// Initialize root with all paths, calculate, exit early if invalid
-		auto root = std::make_shared<CTNode>();
+		CTNode* root = new CTNode();
 		root->isValid = true;
 		for (size_t i = 0; i < this->pathConfigs.size(); i++) root->pathsToCalculate.push_back(i);
 		processCTNode(root);
@@ -558,6 +558,13 @@ namespace impl
 			{
 				this->solutionNodeFound = true;
 				this->solutionNode = current;
+
+				while (openSet.size() > 0)
+				{
+					delete openSet.top();
+					openSet.pop();
+				}
+
 				break;
 			}
 
@@ -565,15 +572,18 @@ namespace impl
 			for (size_t pathIndex : { current->firstConflict.pathA, current->firstConflict.pathB })
 			{
 				// Initialize next node and calculate
-				auto next = std::make_shared<CTNode>();
+				CTNode* next = new CTNode();
 				next->constraints = current->constraints;
 				next->constraints[pathIndex].push_back(current->firstConflict.catEntry);
-				next->solution = current->solution;
+				next->solution = current->solution; // TODO: Check if its better to have these as shared_ptrs
 				next->cat = current->cat;
 				next->pathsToCalculate = { pathIndex };
 				processCTNode(next);
 				if (next->isValid) openSet.push(next);
 			}
+
+			// Delete current node
+			delete current;
 		}
 
 		// No solution without conflicts found, fitness = 0
@@ -590,17 +600,17 @@ namespace impl
 		fitness = 0.0f;
 		for (size_t i = 0; i < this->pathConfigs.size(); i++)
 		{
-			if (!this->solutionNode->solution[i]->found)
+			if (!this->solutionNode->solution[i].found)
 			{
 				LOG(CB_PATHS, "  Path " << i << " in the solution, could not found\n");
 				continue;
 			}
 
 			// Its possible with underground belts to have a lower cost, but cap it to max
-			const auto& first = this->solutionNode->solution[i]->nodes[0];
-			const auto& last = this->solutionNode->solution[i]->nodes.back();
+			const auto& first = this->solutionNode->solution[i].nodes[0];
+			const auto& last = this->solutionNode->solution[i].nodes.back();
 			float shortest = pf::ManhattanDistance((float)first.coordinate.x, (float)first.coordinate.y, (float)last.coordinate.x, (float)last.coordinate.y);
-			float real = this->solutionNode->solution[i]->cost;
+			float real = this->solutionNode->solution[i].cost;
 			real = std::max(real, shortest);
 			if (shortest == 0) fitness += 2.0f;
 			else fitness += (1.0f + shortest / real);
@@ -609,7 +619,7 @@ namespace impl
 		}
 	}
 
-	void PlacementPathfinder::processCTNode(std::shared_ptr<CTNode> node)
+	void PlacementPathfinder::processCTNode(CTNode* node)
 	{
 		// Exit early if no paths to calculate
 		if (node->pathsToCalculate.size() == 0) return;
@@ -653,8 +663,8 @@ namespace impl
 		// Copy new solutions into CAT
 		for (size_t pathIndex : calculateOrder)
 		{
-			node->cost += node->solution[pathIndex]->cost;
-			for (const auto& nodeData : node->solution[pathIndex]->nodes) node->cat.addConflict(pathIndex, nodeData.getCATEntry());
+			node->cost += node->solution[pathIndex].cost;
+			for (const auto& nodeData : node->solution[pathIndex].nodes) node->cat.addConflict(pathIndex, nodeData.getCATEntry());
 		}
 
 		// Find if there are any conflicts for this node and update
@@ -675,7 +685,7 @@ namespace impl
 		node->isValid = true;
 	}
 
-	PathfindingState* PlacementPathfinder::initPathNodeWithContext(size_t pathIndex, const std::shared_ptr<CTNode>& node)
+	PathfindingState* PlacementPathfinder::initPathNodeWithContext(size_t pathIndex, CTNode* node)
 	{
 		// Attempt to resolve the path considering the given CT node
 		// Return nullptr if conflicts and constraints prevent resolution
@@ -748,7 +758,7 @@ namespace impl
 		return new PathfindingState(blockedGrid, node->constraints[pathIndex], goal, PathfindingData{ sourceEndpoint.coordinate, BeltType::None, Direction::N });
 	}
 
-	std::tuple<bool, Coordinate, Direction> PlacementPathfinder::findPathEdgeWithContext(const std::shared_ptr<pf::Path<PathfindingData>>& path, const Coordinate& target, const std::shared_ptr<CTNode>& node, const std::vector<CATEntry>& constraints)
+	std::tuple<bool, Coordinate, Direction> PlacementPathfinder::findPathEdgeWithContext(const pf::Path<PathfindingData>& path, const Coordinate& target, CTNode* node, const std::vector<CATEntry>& constraints)
 	{
 		// Look for the closest edge of the path to the target
 		float bestDistance = std::numeric_limits<float>::max();
@@ -757,9 +767,9 @@ namespace impl
 		bool found = false;
 
 		// For each above ground node in the path, check the 4 directions
-		for (size_t i = 0; i < path->nodes.size(); i++)
+		for (size_t i = 0; i < path.nodes.size(); i++)
 		{
-			const auto& nodeData = path->nodes[i];
+			const auto& nodeData = path.nodes[i];
 			if (nodeData.isAboveGround())
 			{
 				const Coordinate& coord = nodeData.coordinate;
