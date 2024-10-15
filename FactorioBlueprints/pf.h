@@ -61,7 +61,7 @@ namespace pf
 	};
 
 	template<typename T, typename D>
-	Path<D> asPathfinding(T* start)
+	Path<D>* asPathfinding(T* start)
 	{
 		std::priority_queue<T*, std::vector<T*>, CompareNodeByFCost> openSet;
 		std::unordered_set<size_t> closedSetHash;
@@ -83,20 +83,20 @@ namespace pf
 			// Found goal so extract path and cleanup nodes
 			if (current->isGoal())
 			{
-				Path<D> path = Path<D>();
+				Path<D>* path = new Path<D>();
 
 				T* node = current;
 				while (node != nullptr)
 				{
-					path.nodes.push_back(node->moveData());
-					path.cost += node->getGCost();
+					path->nodes.push_back(node->moveData());
+					path->cost += node->getGCost();
 					node = node->getParent();
 				}
 				for (T* node : allNodes) delete node;
 
-				LOG(PATHFINDING, "Path found, cost: " << path.cost << "\n");
-				std::reverse(path.nodes.begin(), path.nodes.end());
-				path.found = true;
+				LOG(PATHFINDING, "Path found, cost: " << path->cost << "\n");
+				std::reverse(path->nodes.begin(), path->nodes.end());
+				path->found = true;
 				return path;
 			}
 
@@ -106,15 +106,15 @@ namespace pf
 			closedSetHash.insert(current->getHash());
 
 			// Add neighbours to open if not in open or closed set
-			const auto neighbours = current->getNeighbours();
-			for (const auto& neighbourDataPtr : neighbours)
+			const auto neighbourDatas = current->getNeighbours();
+			for (const auto& neighbourData : neighbourDatas)
 			{
-				const size_t neighbourHash = neighbourDataPtr->getHash();
+				const size_t neighbourHash = neighbourData->getHash();
 
 				if (closedSetHash.find(neighbourHash) != closedSetHash.end()) continue;
 				if (openSetHash.find(neighbourHash) != openSetHash.end()) continue;
 
-				T* neighbour = new T(*neighbourDataPtr, current);
+				T* neighbour = new T(*neighbourData, current);
 				allNodes.push_back(neighbour);
 				openSet.push(neighbour);
 				openSetHash.insert(neighbour->getHash());
@@ -123,8 +123,8 @@ namespace pf
 
 		// Cleanup and return without path
 		for (T* node : allNodes) delete node;
-		Path<D> path = Path<D>();
-		path.found = false;
+		Path<D>* path = new Path<D>();
+		path->found = false;
 		return path;
 	}
 }

@@ -31,6 +31,7 @@
 //   - The processCTNode() function then calculates the paths in order and updates the node solutions
 //   - The solutions are copied into the node CAT and conflicts are found
 //   - The node is then added to the open set if valid
+//
 // - Now each loop:
 //   - Pop a node off stack
 //   - Split into 2 new nodes on the found conflict
@@ -40,6 +41,12 @@
 // - The majority of the time taken is as follows:
 //   - 47% Calculating the pathfinding
 //   - 35% Copying solutions into CAT
+//
+// To optimize I think algorithm changes are needed.
+// - If you can parallelize the CBS it would be a quick win
+// - Furthermore, When we perform a check there are way more than 1 conflict, currently we take the first
+// - On top of this there may be more than 1 path intersecting at a specific conflict zone
+// - If this was able to split into multiple new nodes then this would work super well with parallelization
 
 namespace impl
 {
@@ -179,86 +186,84 @@ namespace impl
 
 	void PathfindingState::calculateNeighbourCache()
 	{
-		if (neighbourCache.find(hash) == neighbourCache.end())
+		if (neighbourCache.find(hash) != neighbourCache.end()) return;
+		neighbourCache[hash] = std::vector<std::pair<PathfindingData, CATEntry>>();
+
+		if (data.type == BeltType::None)
 		{
-			neighbourCache[hash] = std::vector<std::pair<PathfindingData, CATEntry>>();
-
-			if (data.type == BeltType::None)
+			for (int i = 0; i < 4; i++)
 			{
-				for (int i = 0; i < 4; i++)
-				{
-					Direction newDirection = static_cast<Direction>(1 << i);
-					neighbourCache[hash].push_back({ { data.coordinate, BeltType::Conveyor, newDirection }, {} });
-					neighbourCache[hash].push_back({ { data.coordinate, BeltType::UndergroundEntrance, newDirection }, {} });
-				}
+				Direction newDirection = static_cast<Direction>(1 << i);
+				neighbourCache[hash].push_back({ { data.coordinate, BeltType::Conveyor, newDirection }, {} });
+				neighbourCache[hash].push_back({ { data.coordinate, BeltType::UndergroundEntrance, newDirection }, {} });
 			}
+		}
 
-			else if (data.type == BeltType::Conveyor)
+		else if (data.type == BeltType::Conveyor)
+		{
+			for (int i = 0; i < 4; i++)
+			{
+				Direction newDirection = static_cast<Direction>(1 << i);
+				Coordinate offset = dirOffset(newDirection);
+				Coordinate newCoord = { data.coordinate.x + offset.x, data.coordinate.y + offset.y };
+				if (newCoord.x < 0 || newCoord.x >= blockedGrid.size() || newCoord.y < 0 || newCoord.y >= blockedGrid[0].size()) continue;
+				neighbourCache[hash].push_back({ { newCoord, BeltType::Conveyor, newDirection }, {} });
+				neighbourCache[hash].push_back({ { newCoord, BeltType::UndergroundEntrance, newDirection }, {} });
+			}
+		}
+
+		else if (data.type == BeltType::UndergroundEntrance)
+		{
+			Coordinate offset = dirOffset(data.direction);
+			Coordinate newCoord = { data.coordinate.x + offset.x, data.coordinate.y + offset.y };
+			if (newCoord.x >= 0 && newCoord.x < blockedGrid.size() && newCoord.y >= 0 && newCoord.y < blockedGrid[0].size())
+			{
+				neighbourCache[hash].push_back({ { newCoord, BeltType::Underground, data.direction }, {} });
+				neighbourCache[hash].push_back({ { newCoord, BeltType::UndergroundExit, data.direction }, {} });
+			}
+		}
+
+		else if (data.type == BeltType::Underground)
+		{
+			Coordinate offset = dirOffset(data.direction);
+			Coordinate newCoord = { data.coordinate.x + offset.x, data.coordinate.y + offset.y };
+			if (newCoord.x >= 0 && newCoord.x < blockedGrid.size() && newCoord.y >= 0 && newCoord.y < blockedGrid[0].size())
+			{
+				neighbourCache[hash].push_back({ { newCoord, BeltType::Underground, data.direction }, {} });
+				neighbourCache[hash].push_back({ { newCoord, BeltType::UndergroundExit, data.direction }, {} });
+			}
+		}
+
+		else if (data.type == BeltType::UndergroundExit)
+		{
+			Coordinate offset = dirOffset(data.direction);
+			Coordinate newCoord = { data.coordinate.x + offset.x, data.coordinate.y + offset.y };
+			if (newCoord.x >= 0 && newCoord.x < blockedGrid.size() && newCoord.y >= 0 && newCoord.y < blockedGrid[0].size())
+			{
+				neighbourCache[hash].push_back({ { newCoord, BeltType::Conveyor, data.direction }, {} });
+				neighbourCache[hash].push_back({ { newCoord, BeltType::UndergroundEntrance, data.direction }, {} });
+			}
+		}
+
+		else if (data.type == BeltType::Inserter)
+		{
+			Coordinate offset = dirOffset(data.direction);
+			Coordinate newCoord = { data.coordinate.x + offset.x, data.coordinate.y + offset.y };
+			if (newCoord.x >= 0 && newCoord.x < blockedGrid.size() && newCoord.y >= 0 && newCoord.y < blockedGrid[0].size())
 			{
 				for (int i = 0; i < 4; i++)
 				{
-					Direction newDirection = static_cast<Direction>(1 << i);
-					Coordinate offset = dirOffset(newDirection);
-					Coordinate newCoord = { data.coordinate.x + offset.x, data.coordinate.y + offset.y };
-					if (newCoord.x < 0 || newCoord.x >= blockedGrid.size() || newCoord.y < 0 || newCoord.y >= blockedGrid[0].size()) continue;
+					Direction newDirection = Direction(1 << i);
+					if (data.direction == dirOpposite(newDirection)) continue;
 					neighbourCache[hash].push_back({ { newCoord, BeltType::Conveyor, newDirection }, {} });
 					neighbourCache[hash].push_back({ { newCoord, BeltType::UndergroundEntrance, newDirection }, {} });
 				}
 			}
+		}
 
-			else if (data.type == BeltType::UndergroundEntrance)
-			{
-				Coordinate offset = dirOffset(data.direction);
-				Coordinate newCoord = { data.coordinate.x + offset.x, data.coordinate.y + offset.y };
-				if (newCoord.x >= 0 && newCoord.x < blockedGrid.size() && newCoord.y >= 0 && newCoord.y < blockedGrid[0].size())
-				{
-					neighbourCache[hash].push_back({ { newCoord, BeltType::Underground, data.direction }, {} });
-					neighbourCache[hash].push_back({ { newCoord, BeltType::UndergroundExit, data.direction }, {} });
-				}
-			}
-
-			else if (data.type == BeltType::Underground)
-			{
-				Coordinate offset = dirOffset(data.direction);
-				Coordinate newCoord = { data.coordinate.x + offset.x, data.coordinate.y + offset.y };
-				if (newCoord.x >= 0 && newCoord.x < blockedGrid.size() && newCoord.y >= 0 && newCoord.y < blockedGrid[0].size())
-				{
-					neighbourCache[hash].push_back({ { newCoord, BeltType::Underground, data.direction }, {} });
-					neighbourCache[hash].push_back({ { newCoord, BeltType::UndergroundExit, data.direction }, {} });
-				}
-			}
-
-			else if (data.type == BeltType::UndergroundExit)
-			{
-				Coordinate offset = dirOffset(data.direction);
-				Coordinate newCoord = { data.coordinate.x + offset.x, data.coordinate.y + offset.y };
-				if (newCoord.x >= 0 && newCoord.x < blockedGrid.size() && newCoord.y >= 0 && newCoord.y < blockedGrid[0].size())
-				{
-					neighbourCache[hash].push_back({ { newCoord, BeltType::Conveyor, data.direction }, {} });
-					neighbourCache[hash].push_back({ { newCoord, BeltType::UndergroundEntrance, data.direction }, {} });
-				}
-			}
-
-			else if (data.type == BeltType::Inserter)
-			{
-				Coordinate offset = dirOffset(data.direction);
-				Coordinate newCoord = { data.coordinate.x + offset.x, data.coordinate.y + offset.y };
-				if (newCoord.x >= 0 && newCoord.x < blockedGrid.size() && newCoord.y >= 0 && newCoord.y < blockedGrid[0].size())
-				{
-					for (int i = 0; i < 4; i++)
-					{
-						Direction newDirection = Direction(1 << i);
-						if (data.direction == dirOpposite(newDirection)) continue;
-						neighbourCache[hash].push_back({ { newCoord, BeltType::Conveyor, newDirection }, {} });
-						neighbourCache[hash].push_back({ { newCoord, BeltType::UndergroundEntrance, newDirection }, {} });
-					}
-				}
-			}
-
-			for (auto& neighbour : neighbourCache[hash])
-			{
-				neighbour.second = neighbour.first.getCATEntry();
-			}
+		for (auto& neighbour : neighbourCache[hash])
+		{
+			neighbour.second = neighbour.first.getCATEntry();
 		}
 	}
 
@@ -285,9 +290,17 @@ namespace impl
 		size_t pathsFound = 0;
 		for (const auto& path : solutionNode->solution)
 		{
-			if (path.second.found) pathsFound++;
+			if (path.second->found) pathsFound++;
 		}
 		return pathsFound;
+	}
+
+	PlacementPathfinder::~PlacementPathfinder()
+	{
+		if (solutionNodeFound)
+		{
+			delete solutionNode;
+		}
 	}
 
 	void PlacementPathfinder::print()
@@ -330,10 +343,10 @@ namespace impl
 			printEndpoint(pathConfigs[i].source);
 			std::cout << " to ";
 			printEndpoint(pathConfigs[i].destination);
-			std::cout << ", cost: " << path.cost;
-			std::cout << ", nodes: " << path.nodes.size() << std::endl;
+			std::cout << ", cost: " << path->cost;
+			std::cout << ", nodes: " << path->nodes.size() << std::endl;
 
-			for (const auto& nodeData : path.nodes)
+			for (const auto& nodeData : path->nodes)
 			{
 				std::cout << "- ";
 				nodeData.print();
@@ -558,13 +571,6 @@ namespace impl
 			{
 				this->solutionNodeFound = true;
 				this->solutionNode = current;
-
-				while (openSet.size() > 0)
-				{
-					delete openSet.top();
-					openSet.pop();
-				}
-
 				break;
 			}
 
@@ -575,15 +581,23 @@ namespace impl
 				CTNode* next = new CTNode();
 				next->constraints = current->constraints;
 				next->constraints[pathIndex].push_back(current->firstConflict.catEntry);
-				next->solution = current->solution; // TODO: Check if its better to have these as shared_ptrs
+				next->solution = current->solution;
 				next->cat = current->cat;
 				next->pathsToCalculate = { pathIndex };
 				processCTNode(next);
 				if (next->isValid) openSet.push(next);
+				else delete next;
 			}
 
 			// Delete current node
 			delete current;
+		}
+
+		// Clear up any remaining nodes
+		while (openSet.size() > 0)
+		{
+			delete openSet.top();
+			openSet.pop();
 		}
 
 		// No solution without conflicts found, fitness = 0
@@ -600,17 +614,17 @@ namespace impl
 		fitness = 0.0f;
 		for (size_t i = 0; i < this->pathConfigs.size(); i++)
 		{
-			if (!this->solutionNode->solution[i].found)
+			if (!this->solutionNode->solution[i]->found)
 			{
 				LOG(CB_PATHS, "  Path " << i << " in the solution, could not found\n");
 				continue;
 			}
 
 			// Its possible with underground belts to have a lower cost, but cap it to max
-			const auto& first = this->solutionNode->solution[i].nodes[0];
-			const auto& last = this->solutionNode->solution[i].nodes.back();
+			const auto& first = this->solutionNode->solution[i]->nodes[0];
+			const auto& last = this->solutionNode->solution[i]->nodes.back();
 			float shortest = pf::ManhattanDistance((float)first.coordinate.x, (float)first.coordinate.y, (float)last.coordinate.x, (float)last.coordinate.y);
-			float real = this->solutionNode->solution[i].cost;
+			float real = this->solutionNode->solution[i]->cost;
 			real = std::max(real, shortest);
 			if (shortest == 0) fitness += 2.0f;
 			else fitness += (1.0f + shortest / real);
@@ -656,15 +670,16 @@ namespace impl
 		{
 			auto source = initPathNodeWithContext(pathIndex, node);
 			if (source == nullptr) return;
-			node->solution[pathIndex] = pf::asPathfinding<PathfindingState, PathfindingData>(source);
+			pf::Path<PathfindingData>* path = pf::asPathfinding<PathfindingState, PathfindingData>(source);
+			node->solution[pathIndex] = std::shared_ptr<pf::Path<PathfindingData>>(path);
 			Global::evalCountPF++;
 		}
 
 		// Copy new solutions into CAT
 		for (size_t pathIndex : calculateOrder)
 		{
-			node->cost += node->solution[pathIndex].cost;
-			for (const auto& nodeData : node->solution[pathIndex].nodes) node->cat.addConflict(pathIndex, nodeData.getCATEntry());
+			node->cost += node->solution[pathIndex]->cost;
+			for (const auto& nodeData : node->solution[pathIndex]->nodes) node->cat.addConflict(pathIndex, nodeData.getCATEntry());
 		}
 
 		// Find if there are any conflicts for this node and update
@@ -758,7 +773,7 @@ namespace impl
 		return new PathfindingState(blockedGrid, node->constraints[pathIndex], goal, PathfindingData{ sourceEndpoint.coordinate, BeltType::None, Direction::N });
 	}
 
-	std::tuple<bool, Coordinate, Direction> PlacementPathfinder::findPathEdgeWithContext(const pf::Path<PathfindingData>& path, const Coordinate& target, CTNode* node, const std::vector<CATEntry>& constraints)
+	std::tuple<bool, Coordinate, Direction> PlacementPathfinder::findPathEdgeWithContext(const std::shared_ptr<pf::Path<PathfindingData>>& path, const Coordinate& target, CTNode* node, const std::vector<CATEntry>& constraints)
 	{
 		// Look for the closest edge of the path to the target
 		float bestDistance = std::numeric_limits<float>::max();
@@ -767,9 +782,9 @@ namespace impl
 		bool found = false;
 
 		// For each above ground node in the path, check the 4 directions
-		for (size_t i = 0; i < path.nodes.size(); i++)
+		for (size_t i = 0; i < path->nodes.size(); i++)
 		{
-			const auto& nodeData = path.nodes[i];
+			const auto& nodeData = path->nodes[i];
 			if (nodeData.isAboveGround())
 			{
 				const Coordinate& coord = nodeData.coordinate;

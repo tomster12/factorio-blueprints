@@ -143,8 +143,10 @@ namespace impl
 		const std::vector<std::vector<bool>>& blockedGrid;
 		const std::vector<CATEntry>& constraints;
 		PathfindingGoal goal;
+
 		bool isFitnessCalculated = false;
 		float fCost = 0.0f, gCost = 0.0f, hCost = 0.0f;
+
 		void calculateCosts();
 		void calculateNeighbourCache();
 
@@ -180,10 +182,10 @@ namespace impl
 	public:
 		struct CTConflict
 		{
-			bool isConflict;
-			size_t pathA;
-			size_t pathB;
-			CATEntry catEntry;
+			bool isConflict = false;
+			size_t pathA = 0;
+			size_t pathB = 0;
+			CATEntry catEntry{};
 		};
 
 		struct CTNode
@@ -191,13 +193,14 @@ namespace impl
 			bool isValid = true;
 			std::vector<size_t> pathsToCalculate;
 			std::map<size_t, std::vector<CATEntry>> constraints;
-			std::map<size_t, pf::Path<PathfindingData>> solution;
+			std::map<size_t, std::shared_ptr<pf::Path<PathfindingData>>> solution;
 			CAT cat;
 			CTConflict firstConflict;
 			float cost = 0.0f;
 		};
 
 		PlacementPathfinder(const std::vector<std::vector<bool>>& blockedGrid, const std::vector<ItemEndpoint>& itemEndpoints);
+		~PlacementPathfinder();
 		float getFitness();
 		size_t getPathsFound() const;
 		void print();
@@ -216,7 +219,7 @@ namespace impl
 		size_t currentPathGroup = 0;
 		std::map<size_t, float> pathGroupSpareRates;
 		std::vector<PathConfig> pathConfigs;
-		CTNode* solutionNode;
+		CTNode* solutionNode = nullptr;
 		bool solutionNodeFound = false;
 		bool isFitnessCalculated = false;
 		float fitness = 0.0f;
@@ -226,6 +229,6 @@ namespace impl
 		void performPathfinding();
 		void processCTNode(CTNode* node);
 		PathfindingState* initPathNodeWithContext(size_t pathIndex, CTNode* node);
-		std::tuple<bool, Coordinate, Direction> findPathEdgeWithContext(const pf::Path<PathfindingData>& path, const Coordinate& target, CTNode* node, const std::vector<CATEntry>& constraints);
+		std::tuple<bool, Coordinate, Direction> findPathEdgeWithContext(const std::shared_ptr<pf::Path<PathfindingData>>& path, const Coordinate& target, CTNode* node, const std::vector<CATEntry>& constraints);
 	};
 }
