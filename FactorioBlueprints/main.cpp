@@ -7,7 +7,7 @@ void runSolverGUI();
 
 int main()
 {
-	solveExampleProblem();
+	runSolverGUI();
 }
 
 void runSolverGUI()

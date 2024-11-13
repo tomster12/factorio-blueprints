@@ -29,14 +29,14 @@
 // - First step:
 //   - performPathfinding() first initializes an empty node with all the paths set to be calculated
 //   - The processCTNode() function then calculates the paths in order and updates the node solutions
-//   - The solutions are copied into the node CAT and conflicts are found
+//   - The solutions are copied into the node CAT and conflicts are found and stored in the node
 //   - The node is then added to the open set if valid
 //
 // - Now each loop:
 //   - Pop a node off stack
 //   - Split into 2 new nodes on the found conflict
-//   - Copy existing solutions into nodes
-//   - Calculate each and add onto stack
+//   - Copy previous node solutions into the new nodes
+//   - Calculate each new node and add onto stack
 //
 // - The majority of the time taken is as follows:
 //   - 47% Calculating the pathfinding
@@ -45,8 +45,8 @@
 // To optimize I think algorithm changes are needed.
 // - If you can parallelize the CBS it would be a quick win
 // - Furthermore, When we perform a check there are way more than 1 conflict, currently we take the first
-// - On top of this there may be more than 1 path intersecting at a specific conflict zone
-// - If this was able to split into multiple new nodes then this would work super well with parallelization
+// - On top of this there may be more than 1 path intersecting at a specific conflict point
+// - If this was able to split into multiple new nodes then this would probably work well with parallelization
 
 namespace impl
 {
