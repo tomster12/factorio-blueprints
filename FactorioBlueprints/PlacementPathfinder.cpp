@@ -541,24 +541,21 @@ namespace impl
 		// The openSet will eventually be empty if all the CTNodes end up invalid
 		// This would happen in a solution with no conflicts but some paths invalid
 
-		// Initialize open set
+		this->solutionNodeFound = false;
 		std::priority_queue<CTNode*, std::vector<CTNode*>, CompareCTNodeByCost> openSet;
 
-		// Initialize root with all paths, calculate, exit early if invalid
+		// Start search with root in the open set
 		CTNode* root = new CTNode();
-		root->isValid = true;
 		for (size_t i = 0; i < this->pathConfigs.size(); i++) root->pathsToCalculate.push_back(i);
 		processCTNode(root);
 		if (root->isValid) openSet.push(root);
+		else delete root;
 
-		// While there are nodes to process
-		this->solutionNodeFound = false;
 		while (openSet.size() > 0)
 		{
 			auto current = openSet.top();
 			openSet.pop();
 
-			// LOGGING: Current search status
 			LOG(CB_SEARCH, "  Open set: " << openSet.size() << ", cost: " << current->cost << ", Constraints: ( ");
 			for (const auto& entry : current->constraints)
 			{
@@ -574,22 +571,20 @@ namespace impl
 				break;
 			}
 
-			// Create new nodes for each conflicting path
+			// Create and calculate new nodes for each conflicting path
 			for (size_t pathIndex : { current->firstConflict.pathA, current->firstConflict.pathB })
 			{
-				// Initialize next node and calculate
 				CTNode* next = new CTNode();
 				next->constraints = current->constraints;
-				next->constraints[pathIndex].push_back(current->firstConflict.catEntry);
 				next->solution = current->solution;
 				next->cat = current->cat;
+				next->constraints[pathIndex].push_back(current->firstConflict.catEntry);
 				next->pathsToCalculate = { pathIndex };
 				processCTNode(next);
 				if (next->isValid) openSet.push(next);
 				else delete next;
 			}
 
-			// Delete current node
 			delete current;
 		}
 

@@ -60,15 +60,15 @@ void solveExampleProblem()
 	recipes[1] = { 1, 0.5f, { { 0, 1 } } };           // 1*Item0 -> 1*Item1 @ 0.5/s
 	recipes[2] = { 1, 0.5f, { { 0, 2 }, { 1, 2 } } }; // 2*Item0 + 2*Item1 -> 1*Item2 @ 0.5/s
 
-	// 10x10 Blueprint
+	// 8x8 Blueprint
 	// - Input Item0 @ 4/s at (0, 1)
-	// - Output Item2 @ at (9, 9)
+	// - Output Item2 @ at (7,7)
 	ProblemDefinition problem;
 	problem.recipes = recipes;
-	problem.blueprintWidth = 10;
-	problem.blueprintHeight = 10;
+	problem.blueprintWidth = 8;
+	problem.blueprintHeight = 8;
 	problem.itemInputs[0] = { 0, 4.0f, { 0, 1 } };
-	problem.itemOutput = { 2, { 9, 9 } };
+	problem.itemOutput = { 2, { 7, 7 } };
 
 	// Run problem solver with given parameters
 	ProblemSolver solver = ProblemSolver::solve(problem);
